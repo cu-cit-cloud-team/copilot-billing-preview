@@ -12,7 +12,7 @@
   },
   "dependencies": {
     "@primer/octicons-react": "^19.25.0",
-    "@primer/primitives": "^11.7.1",
+    "@primer/primitives": "^11.9.0",
     "chart.js": "^4.5.1",
     "react": "19.2.6",
     "react-chartjs-2": "^5.3.1",
@@ -21,7 +21,7 @@
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@tailwindcss/vite": "^4.3.0",
-    "@types/node": "^25.6.2",
+    "@types/node": "^25.7.0",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.1",
@@ -31,23 +31,25 @@
     "globals": "^17.6.0",
     "tailwindcss": "^4.3.0",
     "typescript": "~6.0.3",
-    "typescript-eslint": "^8.59.2",
-    "vite": "^8.0.11",
-    "vitest": "^4.1.5"
+    "typescript-eslint": "^8.59.3",
+    "vite": "^8.0.12",
+    "vitest": "^4.1.6"
   },
   "description": "A browser app for previewing GitHub Copilot usage-based billing reports.",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/github/copilot-billing-preview.git"
+    "url": "git+https://github.com/cu-cit-cloud-team/copilot-billing-preview.git"
   },
-  "homepage": "https://copilot-billing-preview.github.com/",
+  "homepage": "https://cu-cit-cloud-team.github.io/copilot-billing-preview/",
   "bugs": {
-    "url": "https://github.com/github/copilot-billing-preview/issues"
+    "url": "https://github.com/cu-cit-cloud-team/copilot-billing-preview/issues"
   },
   "engines": {
-    "node": ">=20.19.0"
+    "node": ">=24.x",
+    "npm": ">=11.x"
   },
+  "packageManager": "npm@11.14.1",
   "keywords": [
     "github-copilot",
     "billing",
