@@ -74,11 +74,13 @@ describe('simulateBudgetFromRecords', () => {
       blockedUsers: 0,
       blockedRequests: 0,
       blockedIncludedCreditsAic: 0,
+      allowedAicQuantity: 30,
       budgetExhausted: false,
       firstUserBlockedDate: null,
       accountBlockedDate: null,
       productBlockedDates: {},
       adjustedDailyNetCostByDate: [{ date: '2026-06-01', amount: 8 }],
+      adjustedDailyGrossCostByDate: [{ date: '2026-06-01', amount: 8 }],
     })
   })
 
@@ -94,11 +96,13 @@ describe('simulateBudgetFromRecords', () => {
       blockedUsers: 2,
       blockedRequests: 43,
       blockedIncludedCreditsAic: 0,
+      allowedAicQuantity: 47.5,
       budgetExhausted: true,
       firstUserBlockedDate: null,
       accountBlockedDate: '2026-06-01',
       productBlockedDates: {},
       adjustedDailyNetCostByDate: [{ date: '2026-06-01', amount: 5 }],
+      adjustedDailyGrossCostByDate: [{ date: '2026-06-01', amount: 5 }],
     })
   })
 
@@ -116,11 +120,13 @@ describe('simulateBudgetFromRecords', () => {
       blockedUsers: 1,
       blockedRequests: 15,
       blockedIncludedCreditsAic: 0,
+      allowedAicQuantity: 60,
       budgetExhausted: true,
       firstUserBlockedDate: null,
       accountBlockedDate: '2026-06-01',
       productBlockedDates: {},
       adjustedDailyNetCostByDate: [{ date: '2026-06-01', amount: 1 }],
+      adjustedDailyGrossCostByDate: [{ date: '2026-06-01', amount: 6 }],
     })
   })
 
@@ -139,11 +145,13 @@ describe('simulateBudgetFromRecords', () => {
       blockedUsers: 1,
       blockedRequests: 50,
       blockedIncludedCreditsAic: 0,
+      allowedAicQuantity: 100,
       budgetExhausted: false,
       firstUserBlockedDate: '2026-06-01',
       accountBlockedDate: null,
       productBlockedDates: {},
       adjustedDailyNetCostByDate: [],
+      adjustedDailyGrossCostByDate: [{ date: '2026-06-01', amount: 10 }],
     })
   })
 
@@ -160,11 +168,13 @@ describe('simulateBudgetFromRecords', () => {
       blockedUsers: 1,
       blockedRequests: 25,
       blockedIncludedCreditsAic: 25,
+      allowedAicQuantity: 25,
       budgetExhausted: false,
       firstUserBlockedDate: '2026-06-01',
       accountBlockedDate: null,
       productBlockedDates: {},
       adjustedDailyNetCostByDate: [],
+      adjustedDailyGrossCostByDate: [{ date: '2026-06-01', amount: 2.5 }],
     })
   })
 
@@ -182,11 +192,13 @@ describe('simulateBudgetFromRecords', () => {
       blockedUsers: 1,
       blockedRequests: 50,
       blockedIncludedCreditsAic: 50,
+      allowedAicQuantity: 50,
       budgetExhausted: false,
       firstUserBlockedDate: '2026-06-01',
       accountBlockedDate: null,
       productBlockedDates: {},
       adjustedDailyNetCostByDate: [],
+      adjustedDailyGrossCostByDate: [{ date: '2026-06-01', amount: 5 }],
     })
   })
 
@@ -207,11 +219,17 @@ describe('simulateBudgetFromRecords', () => {
       blockedUsers: 1,
       blockedRequests: 70,
       blockedIncludedCreditsAic: 30,
+      allowedAicQuantity: 70,
       budgetExhausted: false,
       firstUserBlockedDate: '2026-06-02',
       accountBlockedDate: null,
       productBlockedDates: {},
       adjustedDailyNetCostByDate: [],
+      adjustedDailyGrossCostByDate: [
+        { date: '2026-06-01', amount: 4 },
+        { date: '2026-06-02', amount: 1 },
+        { date: '2026-06-08', amount: 2 },
+      ],
     })
   })
 
@@ -229,11 +247,13 @@ describe('simulateBudgetFromRecords', () => {
       blockedUsers: 1,
       blockedRequests: 25,
       blockedIncludedCreditsAic: 0,
+      allowedAicQuantity: 50,
       budgetExhausted: false,
       firstUserBlockedDate: '2026-06-01',
       accountBlockedDate: null,
       productBlockedDates: {},
       adjustedDailyNetCostByDate: [],
+      adjustedDailyGrossCostByDate: [{ date: '2026-06-01', amount: 5 }],
     })
   })
 
@@ -257,11 +277,13 @@ describe('simulateBudgetFromRecords', () => {
       blockedUsers: 1,
       blockedRequests: 5,
       blockedIncludedCreditsAic: 0,
+      allowedAicQuantity: 15,
       budgetExhausted: false,
       firstUserBlockedDate: '2026-06-01',
       accountBlockedDate: null,
       productBlockedDates: {},
       adjustedDailyNetCostByDate: [{ date: '2026-06-01', amount: 15 }],
+      adjustedDailyGrossCostByDate: [{ date: '2026-06-01', amount: 15 }],
     })
   })
 
@@ -283,11 +305,13 @@ describe('simulateBudgetFromRecords', () => {
       blockedUsers: 1,
       blockedRequests: 5,
       blockedIncludedCreditsAic: 0,
+      allowedAicQuantity: 5,
       budgetExhausted: false,
       firstUserBlockedDate: '2026-06-01',
       accountBlockedDate: null,
       productBlockedDates: {},
       adjustedDailyNetCostByDate: [{ date: '2026-06-01', amount: 5 }],
+      adjustedDailyGrossCostByDate: [{ date: '2026-06-01', amount: 5 }],
     })
   })
 
@@ -305,11 +329,13 @@ describe('simulateBudgetFromRecords', () => {
       blockedUsers: 2,
       blockedRequests: 50,
       blockedIncludedCreditsAic: 50,
+      allowedAicQuantity: 50,
       budgetExhausted: false,
       firstUserBlockedDate: '2026-06-01',
       accountBlockedDate: null,
       productBlockedDates: {},
       adjustedDailyNetCostByDate: [],
+      adjustedDailyGrossCostByDate: [{ date: '2026-06-01', amount: 5 }],
     })
   })
 
@@ -327,11 +353,13 @@ describe('simulateBudgetFromRecords', () => {
       blockedUsers: 1,
       blockedRequests: 10,
       blockedIncludedCreditsAic: 0,
+      allowedAicQuantity: 1050,
       budgetExhausted: true,
       firstUserBlockedDate: null,
       accountBlockedDate: '2026-06-02',
       productBlockedDates: {},
       adjustedDailyNetCostByDate: [{ date: '2026-06-01', amount: 50 }],
+      adjustedDailyGrossCostByDate: [{ date: '2026-06-01', amount: 1050 }],
     })
   })
 
@@ -346,11 +374,13 @@ describe('simulateBudgetFromRecords', () => {
       blockedUsers: 1,
       blockedRequests: 10,
       blockedIncludedCreditsAic: 0,
+      allowedAicQuantity: 20,
       budgetExhausted: true,
       firstUserBlockedDate: null,
       accountBlockedDate: '2026-06-02',
       productBlockedDates: {},
       adjustedDailyNetCostByDate: [{ date: '2026-06-02', amount: 2 }],
+      adjustedDailyGrossCostByDate: [{ date: '2026-06-02', amount: 2 }],
     })
   })
 
@@ -372,6 +402,7 @@ describe('simulateBudgetFromRecords', () => {
       blockedUsers: 1,
       blockedRequests: 10,
       blockedIncludedCreditsAic: 0,
+      allowedAicQuantity: 1050,
       budgetExhausted: false,
       firstUserBlockedDate: null,
       accountBlockedDate: null,
@@ -379,6 +410,7 @@ describe('simulateBudgetFromRecords', () => {
         [PRODUCT_BUDGET_COPILOT]: '2026-06-02',
       },
       adjustedDailyNetCostByDate: [{ date: '2026-06-01', amount: 50 }],
+      adjustedDailyGrossCostByDate: [{ date: '2026-06-01', amount: 1050 }],
     })
   })
 
@@ -399,6 +431,7 @@ describe('simulateBudgetFromRecords', () => {
       blockedUsers: 1,
       blockedRequests: 20,
       blockedIncludedCreditsAic: 0,
+      allowedAicQuantity: 60,
       budgetExhausted: false,
       firstUserBlockedDate: null,
       accountBlockedDate: null,
@@ -407,6 +440,10 @@ describe('simulateBudgetFromRecords', () => {
         [PRODUCT_BUDGET_SPARK]: '2026-06-01',
       },
       adjustedDailyNetCostByDate: [
+        { date: '2026-06-01', amount: 4 },
+        { date: '2026-06-02', amount: 2 },
+      ],
+      adjustedDailyGrossCostByDate: [
         { date: '2026-06-01', amount: 4 },
         { date: '2026-06-02', amount: 2 },
       ],
@@ -425,11 +462,13 @@ describe('runBudgetSimulation', () => {
       blockedUsers: 0,
       blockedRequests: 0,
       blockedIncludedCreditsAic: 0,
+      allowedAicQuantity: 50,
       budgetExhausted: false,
       firstUserBlockedDate: null,
       accountBlockedDate: null,
       productBlockedDates: {},
       adjustedDailyNetCostByDate: [{ date: '2026-04-25', amount: 0.5 }],
+      adjustedDailyGrossCostByDate: [{ date: '2026-04-25', amount: 0.5 }],
     })
   })
 })

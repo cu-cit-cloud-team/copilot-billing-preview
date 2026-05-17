@@ -9,11 +9,13 @@ export type BudgetSimulationResult = {
   blockedUsers: number
   blockedRequests: number
   blockedIncludedCreditsAic: number
+  allowedAicQuantity: number
   budgetExhausted: boolean
   firstUserBlockedDate: string | null
   accountBlockedDate: string | null
   productBlockedDates: Partial<Record<ProductBudgetName, string>>
   adjustedDailyNetCostByDate: Array<{ date: string; amount: number }>
+  adjustedDailyGrossCostByDate: Array<{ date: string; amount: number }>
 }
 
 export type BudgetSimulationOptions = {
@@ -33,6 +35,7 @@ type BudgetSimulationState = {
   remainingProductBudgetByName: Map<ProductBudgetName, number>
   remainingOrganizationIncludedCredits: number
   totalBill: number
+  allowedAicQuantity: number
   blockedRequests: number
   budgetExhausted: boolean
   firstUserBlockedDate: string | null
@@ -40,6 +43,7 @@ type BudgetSimulationState = {
   productBlockedDates: Partial<Record<ProductBudgetName, string>>
   blockedUsers: Set<string>
   adjustedDailyNetCostByDate: Map<string, number>
+  adjustedDailyGrossCostByDate: Map<string, number>
   remainingUserBudgetByUser: Map<string, number>
   remainingMonthlyIncludedCredits: Map<string, number>
   seenIndividualIncludedCreditKeys: Set<string>
@@ -109,6 +113,7 @@ function createBudgetSimulationState(
       .map(([name, amount]) => [name as ProductBudgetName, normalizeBudget(amount)])),
     remainingOrganizationIncludedCredits: context.organizationIncludedCreditsPool,
     totalBill: 0,
+    allowedAicQuantity: 0,
     blockedRequests: 0,
     budgetExhausted: false,
     firstUserBlockedDate: null,
@@ -116,6 +121,7 @@ function createBudgetSimulationState(
     productBlockedDates: {},
     blockedUsers: new Set<string>(),
     adjustedDailyNetCostByDate: new Map<string, number>(),
+    adjustedDailyGrossCostByDate: new Map<string, number>(),
     remainingUserBudgetByUser: new Map<string, number>(),
     remainingMonthlyIncludedCredits: new Map<string, number>(),
     seenIndividualIncludedCreditKeys: new Set<string>(),
@@ -266,6 +272,13 @@ function simulateBudgetRecord(
     const additionalUsageQuantity = Math.max(allowedQuantity - coveredQuantity, 0)
     const additionalSpendAmount = additionalUsageQuantity * costPerAic
 
+    state.allowedAicQuantity += allowedQuantity
+    if (allowedGrossAmount > 0 && record.date) {
+      state.adjustedDailyGrossCostByDate.set(
+        record.date,
+        (state.adjustedDailyGrossCostByDate.get(record.date) ?? 0) + allowedGrossAmount,
+      )
+    }
     state.totalBill += additionalSpendAmount
     if (additionalSpendAmount > 0 && record.date) {
       state.adjustedDailyNetCostByDate.set(record.date, (state.adjustedDailyNetCostByDate.get(record.date) ?? 0) + additionalSpendAmount)
@@ -333,11 +346,15 @@ function finalizeBudgetSimulation(
     blockedUsers: state.blockedUsers.size,
     blockedRequests: Math.round(state.blockedRequests),
     blockedIncludedCreditsAic,
+    allowedAicQuantity: state.allowedAicQuantity,
     budgetExhausted: state.budgetExhausted,
     firstUserBlockedDate: state.firstUserBlockedDate,
     accountBlockedDate: state.accountBlockedDate,
     productBlockedDates: state.productBlockedDates,
     adjustedDailyNetCostByDate: Array.from(state.adjustedDailyNetCostByDate.entries())
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([date, amount]) => ({ date, amount })),
+    adjustedDailyGrossCostByDate: Array.from(state.adjustedDailyGrossCostByDate.entries())
       .sort((a, b) => a[0].localeCompare(b[0]))
       .map(([date, amount]) => ({ date, amount })),
   }
