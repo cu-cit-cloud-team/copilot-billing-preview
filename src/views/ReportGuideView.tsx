@@ -17,6 +17,26 @@ const HEADER = [
   'aic_gross_amount',
 ]
 
+const HEADER_WITH_EXCEEDS_QUOTA = [
+  'date',
+  'username',
+  'product',
+  'sku',
+  'model',
+  'quantity',
+  'unit_type',
+  'applied_cost_per_quantity',
+  'gross_amount',
+  'discount_amount',
+  'net_amount',
+  'exceeds_quota',
+  'total_monthly_quota',
+  'organization',
+  'cost_center_name',
+  'aic_quantity',
+  'aic_gross_amount',
+]
+
 const SAMPLE_ROW_1 = [
   '2026-03-01',
   'mona',
@@ -29,6 +49,7 @@ const SAMPLE_ROW_1 = [
   '0.036000000000000004',
   '0.036000000000000004',
   '0',
+  'FALSE',
   '1000',
   'octodemo',
   'Octocats',
@@ -187,16 +208,21 @@ const SAMPLE_ROW_1_ANNOTATIONS: { index: number; label: string; note: string }[]
     label: 'net_amount',
     note: '$0.00 — net PRU charge after quota discount. No additional cost was incurred for this request.',
   },
-  { index: 11, label: 'total_monthly_quota', note: '1,000 PRUs — the monthly PRU quota for this user\'s plan.' },
-  { index: 12, label: 'organization', note: 'The GitHub organization slug: "octodemo".' },
-  { index: 13, label: 'cost_center_name', note: '"Octocats" — the cost center this user is assigned to.' },
   {
-    index: 14,
+    index: 11,
+    label: 'exceeds_quota',
+    note: 'FALSE — tracked for requests that are billable in PRU terms. TRUE means the user used up their included number of Premium Requests; FALSE means they stayed within the included allowance.',
+  },
+  { index: 12, label: 'total_monthly_quota', note: '1,000 PRUs — the monthly PRU quota for this user\'s plan.' },
+  { index: 13, label: 'organization', note: 'The GitHub organization slug: "octodemo".' },
+  { index: 14, label: 'cost_center_name', note: '"Octocats" — the cost center this user is assigned to.' },
+  {
+    index: 15,
     label: 'aic_quantity',
     note: '≈ 3.107 AICs — the usage-based billing equivalent of this request. AICs represent the actual tokens consumed.',
   },
   {
-    index: 15,
+    index: 16,
     label: 'aic_gross_amount',
     note: '≈ $0.031 (3.107 AICs × $0.01). Under usage-based billing this request would cost roughly $0.03.',
   },
@@ -249,12 +275,7 @@ export function ReportGuideView() {
       <h2 className="text-lg font-semibold text-fg-default mb-2">Report Format</h2>
       <p className="text-fg-muted text-sm mb-7">
         Each row in the CSV export represents one unit of Copilot usage for a single user and model on a given day.
-        Below are annotated examples showing what each field means. Some older exports also include an
-        <code className="mx-1 font-mono text-xs">exceeds_quota</code>
-        column between
-        <code className="mx-1 font-mono text-xs">net_amount</code>
-        and
-        <code className="mx-1 font-mono text-xs">total_monthly_quota</code>.
+        Below are annotated examples showing what each field means.
       </p>
 
       <div className="bg-bg-default border border-border-default rounded-lg px-6 pt-5 pb-6 mb-6">
@@ -268,7 +289,7 @@ export function ReportGuideView() {
           each).
         </p>
 
-        <AnnotatedRow header={HEADER} values={SAMPLE_ROW_1} annotations={SAMPLE_ROW_1_ANNOTATIONS} />
+        <AnnotatedRow header={HEADER_WITH_EXCEEDS_QUOTA} values={SAMPLE_ROW_1} annotations={SAMPLE_ROW_1_ANNOTATIONS} />
       </div>
 
       <div className="bg-bg-default border border-border-default rounded-lg px-6 pt-5 pb-6 mb-6">
