@@ -48,7 +48,7 @@ const FAQ_ITEMS: { question: string; answer: string }[] = [
 export function FaqView() {
   return (
     <section className="max-w-[960px]">
-      <h2 className="text-lg font-semibold text-fg-default mb-6">Frequently Asked Questions</h2>
+      <h2 className="m-0 text-lg text-fg-default mb-6">Frequently Asked Questions</h2>
 
       <dl className="flex flex-col gap-4 m-0 p-0">
         {FAQ_ITEMS.map(({ question, answer }, i) => (

@@ -275,7 +275,7 @@ function AnnotatedRow({ header, values, annotations }: {
 export function ReportGuideView() {
   return (
     <section className="max-w-[960px]">
-      <h2 className="text-lg font-semibold text-fg-default mb-2">Report Format</h2>
+      <h2 className="m-0 text-lg text-fg-default mb-2">Report Format</h2>
       <p className="text-fg-muted text-sm mb-7">
         Each row in the CSV export represents one unit of Copilot usage for a single user and model on a given day.
         Below are annotated examples showing what each field means.
