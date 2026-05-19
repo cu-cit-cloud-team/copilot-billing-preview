@@ -6,7 +6,7 @@ import { calculateAicDiscountAmount, calculateSavingsDifference } from '../utils
 import { fillDataForRange } from '../utils/fillDataForRange'
 import { formatAic } from '../utils/format'
 import { getUserSpendSegmentLabel } from '../utils/userSpendSegments'
-import { BillingProjectionDisclaimer, NegotiatedDiscountDisclaimer, PromotionalDataDisclaimer } from '../components/ui'
+import { BillingProjectionDisclaimer, ExistingDiscountDisclaimer, PromotionalDataDisclaimer } from '../components/ui'
 import { th, thNum, td, tdNum } from '../components/ui/tableStyles'
 
 type DailySummaryModelRow = {
@@ -179,8 +179,8 @@ export function UserDetailsView({
   const aicDiscountAmount = user ? calculateAicDiscountAmount(user.totals.aicGrossAmount, user.totals.aicNetAmount) : 0
   const savings = user ? calculateSavingsDifference(user.totals.netAmount, user.totals.aicNetAmount) : 0
   const planLabel = user ? getPlanLabel(user.totalMonthlyQuota, reportPlanScope) : null
-  const showNegotiatedDiscountDisclaimer = reportPlanScope !== 'individual'
-  const spendSegmentLabel = user && showNegotiatedDiscountDisclaimer ? getUserSpendSegmentLabel(user.spendSegment) : null
+  const showExistingDiscountDisclaimer = reportPlanScope !== 'individual'
+  const spendSegmentLabel = user && showExistingDiscountDisclaimer ? getUserSpendSegmentLabel(user.spendSegment) : null
 
   if (!user) {
     return (
@@ -271,7 +271,7 @@ export function UserDetailsView({
                   <span>Overages</span>
                   <span>{formatCost(user.totals.netAmount)}</span>
                 </div>
-                {showNegotiatedDiscountDisclaimer && <NegotiatedDiscountDisclaimer />}
+                {showExistingDiscountDisclaimer && <ExistingDiscountDisclaimer />}
               </div>
             </div>
             <div className="bg-bg-default border border-border-default rounded-md px-5 py-7 text-center">
@@ -292,7 +292,7 @@ export function UserDetailsView({
                   <span>Additional usage</span>
                   <span>{formatCost(user.totals.aicNetAmount)}</span>
                 </div>
-                {showNegotiatedDiscountDisclaimer ? <NegotiatedDiscountDisclaimer /> : <PromotionalDataDisclaimer />}
+                {showExistingDiscountDisclaimer ? <ExistingDiscountDisclaimer /> : <PromotionalDataDisclaimer />}
               </div>
             </div>
           </div>

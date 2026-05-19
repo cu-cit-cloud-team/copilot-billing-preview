@@ -231,7 +231,7 @@ export function CostManagementView({
         aicQuantity={currentAicQuantity}
         licenseAmount={licenseAmount}
         licenseSeatCounts={licenseSeatCounts}
-        showNegotiatedDiscountDisclaimer={!isIndividualReport}
+        showExistingDiscountDisclaimer={!isIndividualReport}
         showPromotionalDataDisclaimer={isIndividualReport}
         upgradeRecommendation={upgradeRecommendation}
       />

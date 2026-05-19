@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react'
 import { InfoIcon } from '@primer/octicons-react'
 import type { ModelUsageResult, ModelDailyUsageData, ModelUsageTotals } from '../pipeline/aggregators/modelUsageAggregator'
 import { DualAxisLineChart, MultiSeriesStackedBarChart } from '../components'
-import { BillingProjectionDisclaimer, NegotiatedDiscountDisclaimer, PromotionalDataDisclaimer } from '../components/ui'
+import { BillingProjectionDisclaimer, ExistingDiscountDisclaimer, PromotionalDataDisclaimer } from '../components/ui'
 import { th, thNum, td, tdNum } from '../components/ui/tableStyles'
 import { calculateAicDiscountAmount, calculateSavingsDifference } from '../utils/billingComparison'
 import { fillDataForRange } from '../utils/fillDataForRange'
@@ -122,7 +122,7 @@ export function ModelsView({ modelUsage, isIndividualReport, rangeStart, rangeEn
   const periodLabel = rangeStart
     ? new Date(rangeStart + 'T00:00:00').toLocaleString('en-US', { month: 'long', year: 'numeric' })
     : null
-  const showNegotiatedDiscountDisclaimer = !isIndividualReport
+  const showExistingDiscountDisclaimer = !isIndividualReport
 
   return (
     <section className="flex flex-col gap-3" aria-label="Models">
@@ -220,7 +220,7 @@ export function ModelsView({ modelUsage, isIndividualReport, rangeStart, rangeEn
                     <span>Overages</span>
                     <span>{formatUsd(selectedModelTotals.netAmount)}</span>
                   </div>
-                  {showNegotiatedDiscountDisclaimer && <NegotiatedDiscountDisclaimer />}
+                  {showExistingDiscountDisclaimer && <ExistingDiscountDisclaimer />}
                 </div>
               </div>
               <div className="bg-bg-default border border-border-default rounded-md px-5 py-4 text-center py-7">
@@ -241,7 +241,7 @@ export function ModelsView({ modelUsage, isIndividualReport, rangeStart, rangeEn
                     <span>Additional usage</span>
                     <span>{formatUsd(selectedModelAicNetAmount)}</span>
                   </div>
-                  {showNegotiatedDiscountDisclaimer ? <NegotiatedDiscountDisclaimer /> : <PromotionalDataDisclaimer />}
+                  {showExistingDiscountDisclaimer ? <ExistingDiscountDisclaimer /> : <PromotionalDataDisclaimer />}
                 </div>
               </div>
             </div>

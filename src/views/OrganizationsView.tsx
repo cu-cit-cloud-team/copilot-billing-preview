@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useState } from 'react'
 import type { ChangeEvent } from 'react'
-import { BillingProjectionDisclaimer, NegotiatedDiscountDisclaimer } from '../components/ui'
+import { BillingProjectionDisclaimer, ExistingDiscountDisclaimer } from '../components/ui'
 import { th, thNum, td, tdNum } from '../components/ui/tableStyles'
 import { appLinks } from '../config/links'
 import type { OrganizationResult, OrgTotals, OrgUserTotals } from '../pipeline/aggregators/organizationAggregator'
@@ -144,7 +144,7 @@ export function OrganizationsView({ data, rangeStart }: { data: OrganizationResu
                   <span>Overages</span>
                   <span>{formatUsd(totals.netAmount)}</span>
                 </div>
-                <NegotiatedDiscountDisclaimer />
+                <ExistingDiscountDisclaimer />
               </div>
             </div>
             <div className="bg-bg-default border border-border-default rounded-md text-center py-7 px-5">
@@ -165,7 +165,7 @@ export function OrganizationsView({ data, rangeStart }: { data: OrganizationResu
                   <span>Additional usage</span>
                   <span>{formatUsd(totals.aicNetAmount)}</span>
                 </div>
-                <NegotiatedDiscountDisclaimer />
+                <ExistingDiscountDisclaimer />
               </div>
             </div>
           </div>

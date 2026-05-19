@@ -135,7 +135,7 @@ export function OverviewView({
             aicQuantity={overviewTotals.aicQuantity}
             licenseAmount={licenseAmount}
             licenseSeatCounts={licenseSeatCounts}
-            showNegotiatedDiscountDisclaimer={reportPlanScope !== 'individual'}
+            showExistingDiscountDisclaimer={reportPlanScope !== 'individual'}
             showPromotionalDataDisclaimer={reportPlanScope === 'individual'}
             upgradeRecommendation={upgradeRecommendation}
             className="mb-3"

@@ -1,7 +1,7 @@
 import { appLinks } from '../../config/links'
 import type { IndividualPlanUpgradeRecommendation } from '../../utils/individualPlanUpgrade'
 import { formatAic, formatUsd } from '../../utils/format'
-import { NegotiatedDiscountDisclaimer } from './NegotiatedDiscountDisclaimer'
+import { ExistingDiscountDisclaimer } from './ExistingDiscountDisclaimer'
 import { PromotionalDataDisclaimer } from './PromotionalDataDisclaimer'
 
 export type BillingTotalsCardsProps = {
@@ -18,7 +18,7 @@ export type BillingTotalsCardsProps = {
     business: number
     enterprise: number
   }
-  showNegotiatedDiscountDisclaimer?: boolean
+  showExistingDiscountDisclaimer?: boolean
   showPromotionalDataDisclaimer?: boolean
   upgradeRecommendation?: IndividualPlanUpgradeRecommendation | null
   className?: string
@@ -35,7 +35,7 @@ export function BillingTotalsCards({
   aicQuantity,
   licenseAmount,
   licenseSeatCounts,
-  showNegotiatedDiscountDisclaimer = false,
+  showExistingDiscountDisclaimer = false,
   showPromotionalDataDisclaimer = false,
   upgradeRecommendation = null,
   className = '',
@@ -89,7 +89,7 @@ export function BillingTotalsCards({
                   <span>{formatUsd(licenseAmount)}</span>
                 </div>
               )}
-              {(licenseAmount !== undefined || showNegotiatedDiscountDisclaimer) && (
+              {(licenseAmount !== undefined || showExistingDiscountDisclaimer) && (
                 <div className="pt-[6px] border-t border-border-default">
                   {licenseAmount !== undefined && (
                     <div className="flex justify-between items-center text-[13px] text-fg-default tabular-nums font-semibold">
@@ -97,7 +97,7 @@ export function BillingTotalsCards({
                       <span>{formatUsd(pruTotalAmount)}</span>
                     </div>
                   )}
-                  {showNegotiatedDiscountDisclaimer && <NegotiatedDiscountDisclaimer />}
+                  {showExistingDiscountDisclaimer && <ExistingDiscountDisclaimer />}
                 </div>
               )}
             </div>
@@ -128,7 +128,7 @@ export function BillingTotalsCards({
                   <span>{formatUsd(licenseAmount)}</span>
                 </div>
               )}
-              {(licenseAmount !== undefined || showNegotiatedDiscountDisclaimer || showPromotionalDataDisclaimer) && (
+              {(licenseAmount !== undefined || showExistingDiscountDisclaimer || showPromotionalDataDisclaimer) && (
                 <div className="pt-[6px] border-t border-border-default">
                   {licenseAmount !== undefined && (
                     <div className="flex justify-between items-center text-[13px] text-fg-default tabular-nums font-semibold">
@@ -136,9 +136,9 @@ export function BillingTotalsCards({
                       <span>{formatUsd(aicTotalAmount)}</span>
                     </div>
                   )}
-                  {showNegotiatedDiscountDisclaimer && (
+                  {showExistingDiscountDisclaimer && (
                     <>
-                      <NegotiatedDiscountDisclaimer />
+                      <ExistingDiscountDisclaimer />
                       <PromotionalDataDisclaimer scope="organization" />
                     </>
                   )}
