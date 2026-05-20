@@ -1,7 +1,32 @@
 import { describe, expect, it } from 'vitest'
 import { PRODUCT_BUDGET_COPILOT, PRODUCT_BUDGET_COPILOT_CLOUD_AGENT, PRODUCT_BUDGET_SPARK } from '../pipeline/productClassification'
 import type { TokenUsageRecord } from '../pipeline/parser'
-import { simulateBudgetFromRecords } from './budgetSimulation'
+import { runBudgetSimulation, simulateBudgetFromRecords } from './budgetSimulation'
+
+const HEADER = [
+  'date',
+  'username',
+  'product',
+  'sku',
+  'model',
+  'quantity',
+  'unit_type',
+  'applied_cost_per_quantity',
+  'gross_amount',
+  'discount_amount',
+  'net_amount',
+  'exceeds_quota',
+  'total_monthly_quota',
+  'organization',
+  'cost_center_name',
+  'aic_quantity',
+  'aic_gross_amount',
+].join(',')
+
+function createCsv(rows: string[][]): File {
+  const body = [HEADER, ...rows.map((row) => row.join(','))].join('\n')
+  return new File([body], 'usage.csv', { type: 'text/csv' })
+}
 
 function createRecord(overrides: Partial<TokenUsageRecord>): TokenUsageRecord {
   const quantity = overrides.quantity ?? 0
@@ -49,11 +74,13 @@ describe('simulateBudgetFromRecords', () => {
       blockedUsers: 0,
       blockedRequests: 0,
       blockedIncludedCreditsAic: 0,
+      allowedAicQuantity: 30,
       budgetExhausted: false,
       firstUserBlockedDate: null,
       accountBlockedDate: null,
       productBlockedDates: {},
       adjustedDailyNetCostByDate: [{ date: '2026-06-01', amount: 8 }],
+      adjustedDailyGrossCostByDate: [{ date: '2026-06-01', amount: 8 }],
     })
   })
 
@@ -69,11 +96,13 @@ describe('simulateBudgetFromRecords', () => {
       blockedUsers: 2,
       blockedRequests: 43,
       blockedIncludedCreditsAic: 0,
+      allowedAicQuantity: 47.5,
       budgetExhausted: true,
       firstUserBlockedDate: null,
       accountBlockedDate: '2026-06-01',
       productBlockedDates: {},
       adjustedDailyNetCostByDate: [{ date: '2026-06-01', amount: 5 }],
+      adjustedDailyGrossCostByDate: [{ date: '2026-06-01', amount: 5 }],
     })
   })
 
@@ -91,11 +120,13 @@ describe('simulateBudgetFromRecords', () => {
       blockedUsers: 1,
       blockedRequests: 15,
       blockedIncludedCreditsAic: 0,
+      allowedAicQuantity: 60,
       budgetExhausted: true,
       firstUserBlockedDate: null,
       accountBlockedDate: '2026-06-01',
       productBlockedDates: {},
       adjustedDailyNetCostByDate: [{ date: '2026-06-01', amount: 1 }],
+      adjustedDailyGrossCostByDate: [{ date: '2026-06-01', amount: 6 }],
     })
   })
 
@@ -114,11 +145,13 @@ describe('simulateBudgetFromRecords', () => {
       blockedUsers: 1,
       blockedRequests: 50,
       blockedIncludedCreditsAic: 0,
+      allowedAicQuantity: 100,
       budgetExhausted: false,
       firstUserBlockedDate: '2026-06-01',
       accountBlockedDate: null,
       productBlockedDates: {},
       adjustedDailyNetCostByDate: [],
+      adjustedDailyGrossCostByDate: [{ date: '2026-06-01', amount: 10 }],
     })
   })
 
@@ -135,11 +168,13 @@ describe('simulateBudgetFromRecords', () => {
       blockedUsers: 1,
       blockedRequests: 25,
       blockedIncludedCreditsAic: 25,
+      allowedAicQuantity: 25,
       budgetExhausted: false,
       firstUserBlockedDate: '2026-06-01',
       accountBlockedDate: null,
       productBlockedDates: {},
       adjustedDailyNetCostByDate: [],
+      adjustedDailyGrossCostByDate: [{ date: '2026-06-01', amount: 2.5 }],
     })
   })
 
@@ -157,11 +192,13 @@ describe('simulateBudgetFromRecords', () => {
       blockedUsers: 1,
       blockedRequests: 50,
       blockedIncludedCreditsAic: 50,
+      allowedAicQuantity: 50,
       budgetExhausted: false,
       firstUserBlockedDate: '2026-06-01',
       accountBlockedDate: null,
       productBlockedDates: {},
       adjustedDailyNetCostByDate: [],
+      adjustedDailyGrossCostByDate: [{ date: '2026-06-01', amount: 5 }],
     })
   })
 
@@ -182,11 +219,17 @@ describe('simulateBudgetFromRecords', () => {
       blockedUsers: 1,
       blockedRequests: 70,
       blockedIncludedCreditsAic: 30,
+      allowedAicQuantity: 70,
       budgetExhausted: false,
       firstUserBlockedDate: '2026-06-02',
       accountBlockedDate: null,
       productBlockedDates: {},
       adjustedDailyNetCostByDate: [],
+      adjustedDailyGrossCostByDate: [
+        { date: '2026-06-01', amount: 4 },
+        { date: '2026-06-02', amount: 1 },
+        { date: '2026-06-08', amount: 2 },
+      ],
     })
   })
 
@@ -204,11 +247,71 @@ describe('simulateBudgetFromRecords', () => {
       blockedUsers: 1,
       blockedRequests: 25,
       blockedIncludedCreditsAic: 0,
+      allowedAicQuantity: 50,
       budgetExhausted: false,
       firstUserBlockedDate: '2026-06-01',
       accountBlockedDate: null,
       productBlockedDates: {},
       adjustedDailyNetCostByDate: [],
+      adjustedDailyGrossCostByDate: [{ date: '2026-06-01', amount: 5 }],
+    })
+  })
+
+  it('uses spend segment user budgets before falling back to the universal user budget', () => {
+    const result = simulateBudgetFromRecords([
+      createRecord({ username: 'mona', quantity: 10, aic_quantity: 10, aic_gross_amount: 10 }),
+      createRecord({ username: 'octocat', quantity: 10, aic_quantity: 10, aic_gross_amount: 10 }),
+    ], {
+      userBudgetUsd: 10,
+      userBudgetUsdBySpendSegment: {
+        power: 5,
+      },
+      userSpendSegmentsByUsername: {
+        mona: 'power',
+        octocat: 'typical',
+      },
+    }, pooledContext)
+
+    expect(result).toEqual({
+      totalBill: 15,
+      blockedUsers: 1,
+      blockedRequests: 5,
+      blockedIncludedCreditsAic: 0,
+      allowedAicQuantity: 15,
+      budgetExhausted: false,
+      firstUserBlockedDate: '2026-06-01',
+      accountBlockedDate: null,
+      productBlockedDates: {},
+      adjustedDailyNetCostByDate: [{ date: '2026-06-01', amount: 15 }],
+      adjustedDailyGrossCostByDate: [{ date: '2026-06-01', amount: 15 }],
+    })
+  })
+
+  it('falls back to the universal user budget when a segment budget is blank', () => {
+    const result = simulateBudgetFromRecords([
+      createRecord({ username: 'mona', quantity: 10, aic_quantity: 10, aic_gross_amount: 10 }),
+    ], {
+      userBudgetUsd: 5,
+      userBudgetUsdBySpendSegment: {
+        power: undefined,
+      },
+      userSpendSegmentsByUsername: {
+        mona: 'power',
+      },
+    }, pooledContext)
+
+    expect(result).toEqual({
+      totalBill: 5,
+      blockedUsers: 1,
+      blockedRequests: 5,
+      blockedIncludedCreditsAic: 0,
+      allowedAicQuantity: 5,
+      budgetExhausted: false,
+      firstUserBlockedDate: '2026-06-01',
+      accountBlockedDate: null,
+      productBlockedDates: {},
+      adjustedDailyNetCostByDate: [{ date: '2026-06-01', amount: 5 }],
+      adjustedDailyGrossCostByDate: [{ date: '2026-06-01', amount: 5 }],
     })
   })
 
@@ -226,11 +329,13 @@ describe('simulateBudgetFromRecords', () => {
       blockedUsers: 2,
       blockedRequests: 50,
       blockedIncludedCreditsAic: 50,
+      allowedAicQuantity: 50,
       budgetExhausted: false,
       firstUserBlockedDate: '2026-06-01',
       accountBlockedDate: null,
       productBlockedDates: {},
       adjustedDailyNetCostByDate: [],
+      adjustedDailyGrossCostByDate: [{ date: '2026-06-01', amount: 5 }],
     })
   })
 
@@ -248,11 +353,13 @@ describe('simulateBudgetFromRecords', () => {
       blockedUsers: 1,
       blockedRequests: 10,
       blockedIncludedCreditsAic: 0,
+      allowedAicQuantity: 1050,
       budgetExhausted: true,
       firstUserBlockedDate: null,
       accountBlockedDate: '2026-06-02',
       productBlockedDates: {},
       adjustedDailyNetCostByDate: [{ date: '2026-06-01', amount: 50 }],
+      adjustedDailyGrossCostByDate: [{ date: '2026-06-01', amount: 1050 }],
     })
   })
 
@@ -267,11 +374,13 @@ describe('simulateBudgetFromRecords', () => {
       blockedUsers: 1,
       blockedRequests: 10,
       blockedIncludedCreditsAic: 0,
+      allowedAicQuantity: 20,
       budgetExhausted: true,
       firstUserBlockedDate: null,
       accountBlockedDate: '2026-06-02',
       productBlockedDates: {},
       adjustedDailyNetCostByDate: [{ date: '2026-06-02', amount: 2 }],
+      adjustedDailyGrossCostByDate: [{ date: '2026-06-02', amount: 2 }],
     })
   })
 
@@ -293,6 +402,7 @@ describe('simulateBudgetFromRecords', () => {
       blockedUsers: 1,
       blockedRequests: 10,
       blockedIncludedCreditsAic: 0,
+      allowedAicQuantity: 1050,
       budgetExhausted: false,
       firstUserBlockedDate: null,
       accountBlockedDate: null,
@@ -300,6 +410,7 @@ describe('simulateBudgetFromRecords', () => {
         [PRODUCT_BUDGET_COPILOT]: '2026-06-02',
       },
       adjustedDailyNetCostByDate: [{ date: '2026-06-01', amount: 50 }],
+      adjustedDailyGrossCostByDate: [{ date: '2026-06-01', amount: 1050 }],
     })
   })
 
@@ -320,6 +431,7 @@ describe('simulateBudgetFromRecords', () => {
       blockedUsers: 1,
       blockedRequests: 20,
       blockedIncludedCreditsAic: 0,
+      allowedAicQuantity: 60,
       budgetExhausted: false,
       firstUserBlockedDate: null,
       accountBlockedDate: null,
@@ -331,6 +443,32 @@ describe('simulateBudgetFromRecords', () => {
         { date: '2026-06-01', amount: 4 },
         { date: '2026-06-02', amount: 2 },
       ],
+      adjustedDailyGrossCostByDate: [
+        { date: '2026-06-01', amount: 4 },
+        { date: '2026-06-02', amount: 2 },
+      ],
+    })
+  })
+})
+
+describe('runBudgetSimulation', () => {
+  it('normalizes known-window CSV rows before simulating budgets', async () => {
+    const file = createCsv([
+      ['2026-04-25', 'mona', 'copilot', 'copilot_premium_request', 'GPT-5', '10', 'requests', '0.04', '0.40', '0', '0.40', 'False', '0', '', '', '100', '1.00'],
+    ])
+
+    await expect(runBudgetSimulation(file, { accountBudgetUsd: 10 })).resolves.toEqual({
+      totalBill: 0.5,
+      blockedUsers: 0,
+      blockedRequests: 0,
+      blockedIncludedCreditsAic: 0,
+      allowedAicQuantity: 50,
+      budgetExhausted: false,
+      firstUserBlockedDate: null,
+      accountBlockedDate: null,
+      productBlockedDates: {},
+      adjustedDailyNetCostByDate: [{ date: '2026-04-25', amount: 0.5 }],
+      adjustedDailyGrossCostByDate: [{ date: '2026-04-25', amount: 0.5 }],
     })
   })
 })

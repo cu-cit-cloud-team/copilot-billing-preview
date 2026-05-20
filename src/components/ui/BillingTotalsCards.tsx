@@ -1,7 +1,7 @@
 import { appLinks } from '../../config/links'
 import type { IndividualPlanUpgradeRecommendation } from '../../utils/individualPlanUpgrade'
 import { formatAic, formatUsd } from '../../utils/format'
-import { NegotiatedDiscountDisclaimer } from './NegotiatedDiscountDisclaimer'
+import { ExistingDiscountDisclaimer } from './ExistingDiscountDisclaimer'
 import { PromotionalDataDisclaimer } from './PromotionalDataDisclaimer'
 
 export type BillingTotalsCardsProps = {
@@ -18,7 +18,7 @@ export type BillingTotalsCardsProps = {
     business: number
     enterprise: number
   }
-  showNegotiatedDiscountDisclaimer?: boolean
+  showExistingDiscountDisclaimer?: boolean
   showPromotionalDataDisclaimer?: boolean
   upgradeRecommendation?: IndividualPlanUpgradeRecommendation | null
   className?: string
@@ -35,7 +35,7 @@ export function BillingTotalsCards({
   aicQuantity,
   licenseAmount,
   licenseSeatCounts,
-  showNegotiatedDiscountDisclaimer = false,
+  showExistingDiscountDisclaimer = false,
   showPromotionalDataDisclaimer = false,
   upgradeRecommendation = null,
   className = '',
@@ -47,7 +47,7 @@ export function BillingTotalsCards({
     <div className={`flex flex-col gap-3 ${className}`.trim()}>
       {upgradeRecommendation && (
         <p className="m-0 text-base font-normal text-center text-fg-default leading-normal">
-          Your current additional usage cost is <strong>{formatUsd(upgradeRecommendation.currentAdditionalUsageCostUsd)}</strong>. Upgrading to <strong>{upgradeRecommendation.nextPlanLabel}</strong> would reduce your total monthly bill by <strong>{formatUsd(upgradeRecommendation.netSavingsUsd)}</strong>. The total bill (license + additional usage) would be <strong>{formatUsd(upgradeRecommendation.upgradedTotalBillUsd)}</strong>.
+          Upgrading to <strong>{upgradeRecommendation.nextPlanLabel}</strong> would reduce your total monthly bill by <strong>{formatUsd(upgradeRecommendation.netSavingsUsd)}</strong>.
           {upgradeRecommendation.nextPlanTier === 'max' && (
             <>
               {' '}
@@ -71,11 +71,11 @@ export function BillingTotalsCards({
           <div className="text-xs text-fg-muted mt-1">1 PRU = $0.04</div>
           <div className="mt-4 pt-3 border-t border-border-default w-full flex flex-col gap-[6px] text-left">
             <div className="flex justify-between items-center text-[13px] text-fg-default tabular-nums">
-              <span>Consumed (PRUs)</span>
+              <span>Consumed PRUs</span>
               <span>{formatUsd(pruGrossAmount)}</span>
             </div>
             <div className="flex justify-between items-center text-[13px] text-fg-muted tabular-nums">
-              <span>Discount (included PRUs)</span>
+              <span>Included PRUs</span>
               <span>−{formatUsd(pruDiscountAmount)}</span>
             </div>
             <div className="pt-[6px] border-t border-dotted border-border-muted flex flex-col gap-[6px]">
@@ -89,7 +89,7 @@ export function BillingTotalsCards({
                   <span>{formatUsd(licenseAmount)}</span>
                 </div>
               )}
-              {(licenseAmount !== undefined || showNegotiatedDiscountDisclaimer) && (
+              {(licenseAmount !== undefined || showExistingDiscountDisclaimer) && (
                 <div className="pt-[6px] border-t border-border-default">
                   {licenseAmount !== undefined && (
                     <div className="flex justify-between items-center text-[13px] text-fg-default tabular-nums font-semibold">
@@ -97,7 +97,7 @@ export function BillingTotalsCards({
                       <span>{formatUsd(pruTotalAmount)}</span>
                     </div>
                   )}
-                  {showNegotiatedDiscountDisclaimer && <NegotiatedDiscountDisclaimer />}
+                  {showExistingDiscountDisclaimer && <ExistingDiscountDisclaimer />}
                 </div>
               )}
             </div>
@@ -110,11 +110,11 @@ export function BillingTotalsCards({
           <div className="text-xs text-fg-muted mt-1">1 AIC = $0.01</div>
           <div className="mt-4 pt-3 border-t border-border-default w-full flex flex-col gap-[6px] text-left">
             <div className="flex justify-between items-center text-[13px] text-fg-default tabular-nums">
-              <span>Consumed (AICs)</span>
+              <span>Consumed AICs</span>
               <span>{formatUsd(aicGrossAmount)}</span>
             </div>
             <div className="flex justify-between items-center text-[13px] text-fg-muted tabular-nums">
-              <span>Discount (included AICs)</span>
+              <span>Included AICs</span>
               <span>−{formatUsd(aicDiscountAmount)}</span>
             </div>
             <div className="pt-[6px] border-t border-dotted border-border-muted flex flex-col gap-[6px]">
@@ -128,7 +128,7 @@ export function BillingTotalsCards({
                   <span>{formatUsd(licenseAmount)}</span>
                 </div>
               )}
-              {(licenseAmount !== undefined || showNegotiatedDiscountDisclaimer || showPromotionalDataDisclaimer) && (
+              {(licenseAmount !== undefined || showExistingDiscountDisclaimer || showPromotionalDataDisclaimer) && (
                 <div className="pt-[6px] border-t border-border-default">
                   {licenseAmount !== undefined && (
                     <div className="flex justify-between items-center text-[13px] text-fg-default tabular-nums font-semibold">
@@ -136,9 +136,9 @@ export function BillingTotalsCards({
                       <span>{formatUsd(aicTotalAmount)}</span>
                     </div>
                   )}
-                  {showNegotiatedDiscountDisclaimer && (
+                  {showExistingDiscountDisclaimer && (
                     <>
-                      <NegotiatedDiscountDisclaimer />
+                      <ExistingDiscountDisclaimer />
                       <PromotionalDataDisclaimer scope="organization" />
                     </>
                   )}
@@ -151,8 +151,8 @@ export function BillingTotalsCards({
       </div>
       {licenseSeatCounts && (
         <p className="m-0 text-[13px] text-fg-muted leading-normal text-center">
-          This estimate uses <strong className="text-fg-default">{licenseSeatCounts.business.toLocaleString()}</strong> Copilot Business and{' '}
-          <strong className="text-fg-default">{licenseSeatCounts.enterprise.toLocaleString()}</strong> Copilot Enterprise users. If you have more users with these licenses that are missing from the report, you can adjust counters in the <strong className="text-fg-default">Users</strong> section of this app.
+          This report contains activity for <strong className="text-fg-default">{licenseSeatCounts.business.toLocaleString()}</strong> Copilot Business and{' '}
+          <strong className="text-fg-default">{licenseSeatCounts.enterprise.toLocaleString()}</strong> Copilot Enterprise users. If you had more users with these licenses during the billing period covered by the uploaded report, you can adjust counters in the <strong className="text-fg-default">Users</strong> section of this app.
         </p>
       )}
     </div>

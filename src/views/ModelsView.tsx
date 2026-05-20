@@ -1,8 +1,9 @@
 import { useState, useMemo } from 'react'
 import { InfoIcon } from '@primer/octicons-react'
-import type { ModelUsageResult, ModelDailyUsageData } from '../pipeline/aggregators/modelUsageAggregator'
+import type { ModelUsageResult, ModelDailyUsageData, ModelUsageTotals } from '../pipeline/aggregators/modelUsageAggregator'
 import { DualAxisLineChart, MultiSeriesStackedBarChart } from '../components'
-import { BillingProjectionDisclaimer, NegotiatedDiscountDisclaimer, PromotionalDataDisclaimer } from '../components/ui'
+import { BillingProjectionDisclaimer, ExistingDiscountDisclaimer, PromotionalDataDisclaimer } from '../components/ui'
+import { th, thNum, td, tdNum } from '../components/ui/tableStyles'
 import { calculateAicDiscountAmount, calculateSavingsDifference } from '../utils/billingComparison'
 import { fillDataForRange } from '../utils/fillDataForRange'
 import { formatAic, formatUsd } from '../utils/format'
@@ -27,6 +28,17 @@ type ModelsViewProps = {
   rangeEnd: string | null
 }
 
+type ModelDriverRow = {
+  model: string
+  totals: ModelUsageTotals
+}
+
+type ModelDriverSummary = {
+  totalAicQuantity: number
+  topAicModels: ModelDriverRow[]
+  hasUsage: boolean
+}
+
 function formatAverageAicPerRequest(value: number): string {
   return value.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 3 })
 }
@@ -35,8 +47,47 @@ function roundAverageAicPerRequest(value: number): number {
   return Number(value.toFixed(3))
 }
 
+function formatShare(value: number, total: number): string {
+  if (value <= 0 || total <= 0) return '0%'
+
+  return (value / total).toLocaleString(undefined, {
+    style: 'percent',
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 1,
+  })
+}
+
+function sortByMetric(metric: (totals: ModelUsageTotals) => number) {
+  return (a: ModelDriverRow, b: ModelDriverRow) => metric(b.totals) - metric(a.totals) || a.model.localeCompare(b.model)
+}
+
+function getModelDriverSummary(modelUsage: ModelUsageResult): ModelDriverSummary {
+  const rows: ModelDriverRow[] = []
+
+  for (const model of modelUsage.models) {
+    const totals = modelUsage.totalsByModel[model]
+    if (totals) {
+      rows.push({ model, totals })
+    }
+  }
+
+  const totalAicQuantity = rows.reduce((sum, row) => sum + row.totals.aicQuantity, 0)
+  const byAicQuantity = [...rows].sort(sortByMetric((totals) => totals.aicQuantity))
+
+  return {
+    totalAicQuantity,
+    topAicModels: byAicQuantity.slice(0, 3),
+    hasUsage: totalAicQuantity > 0,
+  }
+}
+
 export function ModelsView({ modelUsage, isIndividualReport, rangeStart, rangeEnd }: ModelsViewProps) {
   const [selectedModel, setSelectedModel] = useState<string>(modelUsage.models[0] ?? '')
+
+  const modelDriverSummary = useMemo(
+    () => getModelDriverSummary(modelUsage),
+    [modelUsage],
+  )
 
   const selectedModelTotals = useMemo(
     () => (selectedModel ? modelUsage.totalsByModel[selectedModel] ?? null : null),
@@ -71,13 +122,52 @@ export function ModelsView({ modelUsage, isIndividualReport, rangeStart, rangeEn
   const periodLabel = rangeStart
     ? new Date(rangeStart + 'T00:00:00').toLocaleString('en-US', { month: 'long', year: 'numeric' })
     : null
-  const showNegotiatedDiscountDisclaimer = !isIndividualReport
+  const showExistingDiscountDisclaimer = !isIndividualReport
 
   return (
-    <section className="flex flex-col gap-5" aria-label="Per-Model Breakdown">
-      <div className="flex justify-between items-center mb-3">
-        <h3 className="m-0 text-sm font-bold text-fg-default uppercase tracking-wide">Per-Model Breakdown</h3>
+    <section className="flex flex-col gap-3" aria-label="Models">
+      <div className="flex items-baseline gap-3 mb-4">
+        <h2 className="m-0 text-lg text-fg-default">Models</h2>
+        <span className="text-[13px] text-fg-muted">
+          {modelUsage.models.length.toLocaleString()} total
+        </span>
       </div>
+
+      {modelDriverSummary.hasUsage ? (
+        <div className="bg-bg-default border border-border-default rounded-md overflow-hidden">
+          <div className="px-4 py-3 border-b border-border-default text-xs font-bold tracking-[0.05em] uppercase text-fg-muted bg-bg-muted">
+            Top models by AIC consumption
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[640px] border-collapse text-[13px]">
+              <thead>
+                <tr>
+                  <th className={th}>Rank</th>
+                  <th className={th}>Model</th>
+                  <th className={thNum}>AICs</th>
+                  <th className={thNum}>% of AICs</th>
+                  <th className={thNum}>Gross cost</th>
+                </tr>
+              </thead>
+              <tbody>
+                {modelDriverSummary.topAicModels.map((row, index) => (
+                  <tr key={row.model}>
+                    <td className={`${td} text-fg-muted tabular-nums`}>{index + 1}</td>
+                    <td className={`${td} font-semibold text-fg-default`}>{row.model}</td>
+                    <td className={tdNum}>{formatAic(row.totals.aicQuantity)}</td>
+                    <td className={tdNum}>{formatShare(row.totals.aicQuantity, modelDriverSummary.totalAicQuantity)}</td>
+                    <td className={tdNum}>{formatUsd(row.totals.aicGrossAmount)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      ) : (
+        <p className="m-0 text-sm text-fg-muted leading-normal">
+          No AIC consumption or gross usage-based cost appears in this report.
+        </p>
+      )}
       <div className="flex gap-4 items-start justify-between flex-wrap mb-5 w-full">
         <label className="flex flex-col gap-2 text-xs font-medium text-fg-muted uppercase tracking-wide">
           Model
@@ -119,18 +209,18 @@ export function ModelsView({ modelUsage, isIndividualReport, rangeStart, rangeEn
                 <div className="text-xs text-fg-muted mt-1">1 PRU = $0.04</div>
                 <div className="mt-4 pt-3 border-t border-border-default w-full flex flex-col gap-1.5 text-left">
                   <div className="flex justify-between items-center text-[13px] text-fg-default tabular-nums">
-                    <span>Consumed (PRUs)</span>
+                    <span>Consumed PRUs</span>
                     <span>{formatUsd(selectedModelTotals.grossAmount)}</span>
                   </div>
                   <div className="flex justify-between items-center text-[13px] text-fg-muted tabular-nums">
-                    <span>Discount (included PRUs)</span>
+                    <span>Included PRUs</span>
                     <span>−{formatUsd(selectedModelTotals.discountAmount)}</span>
                   </div>
                   <div className="flex justify-between items-center text-[13px] text-fg-default tabular-nums pt-1.5 border-t border-border-default font-semibold">
                     <span>Overages</span>
                     <span>{formatUsd(selectedModelTotals.netAmount)}</span>
                   </div>
-                  {showNegotiatedDiscountDisclaimer && <NegotiatedDiscountDisclaimer />}
+                  {showExistingDiscountDisclaimer && <ExistingDiscountDisclaimer />}
                 </div>
               </div>
               <div className="bg-bg-default border border-border-default rounded-md px-5 py-4 text-center py-7">
@@ -140,18 +230,18 @@ export function ModelsView({ modelUsage, isIndividualReport, rangeStart, rangeEn
                 <div className="text-xs text-fg-muted mt-1">1 AIC = $0.01</div>
                 <div className="mt-4 pt-3 border-t border-border-default w-full flex flex-col gap-1.5 text-left">
                   <div className="flex justify-between items-center text-[13px] text-fg-default tabular-nums">
-                    <span>Consumed (AICs)</span>
+                    <span>Consumed AICs</span>
                     <span>{formatUsd(selectedModelTotals.aicGrossAmount)}</span>
                   </div>
                   <div className="flex justify-between items-center text-[13px] text-fg-muted tabular-nums">
-                    <span>Discount (included AICs)</span>
+                    <span>Included AICs</span>
                     <span>−{formatUsd(selectedModelAicDiscount)}</span>
                   </div>
                   <div className="flex justify-between items-center text-[13px] text-fg-default tabular-nums pt-1.5 border-t border-border-default font-semibold">
                     <span>Additional usage</span>
                     <span>{formatUsd(selectedModelAicNetAmount)}</span>
                   </div>
-                  {showNegotiatedDiscountDisclaimer ? <NegotiatedDiscountDisclaimer /> : <PromotionalDataDisclaimer />}
+                  {showExistingDiscountDisclaimer ? <ExistingDiscountDisclaimer /> : <PromotionalDataDisclaimer />}
                 </div>
               </div>
             </div>

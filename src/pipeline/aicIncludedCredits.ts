@@ -1,7 +1,7 @@
 import {
   getAicUsageMetrics,
   parseTokenUsageHeader,
-  parseTokenUsageRecord,
+  parseNormalizedTokenUsageRecord,
   type TokenUsageHeader,
   type TokenUsageRecord,
 } from './parser'
@@ -189,7 +189,9 @@ export async function calculateAicIncludedCreditsContext(
       continue
     }
 
-    const record = parseTokenUsageRecord(trimmed, header)
+    const record = parseNormalizedTokenUsageRecord(trimmed, header)
+    if (!record) continue
+
     const username = record.username.trim()
     if (!username) continue
 

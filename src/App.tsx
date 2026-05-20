@@ -2,7 +2,7 @@ import { useCallback, useRef, useState } from 'react'
 import type { ChangeEvent, DragEvent, KeyboardEvent, MouseEvent } from 'react'
 import { MarkGithubIcon, GraphIcon, PeopleIcon, CopilotIcon, TableIcon, OrganizationIcon, DatabaseIcon, InfoIcon, QuestionIcon, CreditCardIcon } from '@primer/octicons-react'
 
-import { UploadPage } from './components'
+import { NewVersionBanner, UploadPage } from './components'
 import { UsersView } from './views/UsersView'
 import type { SeatOverrides } from './views/UsersView'
 import { UserDetailsView } from './views/UserDetailsView'
@@ -13,7 +13,8 @@ import { ReportGuideView } from './views/ReportGuideView'
 import { FaqView } from './views/FaqView'
 import { ProductsView } from './views/ProductsView'
 import { OverviewView } from './views/OverviewView'
-import { CostManagementView, type BudgetField, type BudgetValues } from './views/CostManagementView'
+import { CostManagementView } from './views/CostManagementView'
+import { SpendInsightsView } from './views/SpendInsightsView'
 import { appLinks } from './config/links'
 import { QuickStatsAggregator, type QuickStatsResult } from './pipeline/aggregators/quickStatsAggregator'
 import { ReportContextAggregator, type ReportContextResult } from './pipeline/aggregators/reportContextAggregator'
@@ -23,25 +24,26 @@ import { ProductUsageAggregator, type ProductUsageResult } from './pipeline/aggr
 import { CostCenterAggregator, type CostCenterResult } from './pipeline/aggregators/costCenterAggregator'
 import { OrganizationAggregator, type OrganizationResult } from './pipeline/aggregators/organizationAggregator'
 import { UserUsageAggregator, type UserUsageResult } from './pipeline/aggregators/userUsageAggregator'
-import { calculateLicenseSummary, inferReportPlanScope, type AicIncludedCreditsOverrides } from './pipeline/aicIncludedCredits'
+import {
+  BUSINESS_MONTHLY_AIC_INCLUDED_CREDITS,
+  ENTERPRISE_MONTHLY_AIC_INCLUDED_CREDITS,
+  calculateLicenseSummary,
+  inferReportPlanScope,
+  type AicIncludedCreditsOverrides,
+} from './pipeline/aicIncludedCredits'
 import { PRODUCT_BUDGET_COPILOT, PRODUCT_BUDGET_COPILOT_CLOUD_AGENT, PRODUCT_BUDGET_SPARK } from './pipeline/productClassification'
 import { runPipeline } from './pipeline/runPipeline'
 import { runBudgetSimulation, type BudgetSimulationResult } from './utils/budgetSimulation'
+import { EMPTY_BUDGET_VALUES, getDefaultBudgetValues, getUserSpendSegmentsByUsername, type BudgetField, type BudgetValues } from './utils/costManagementBudgets'
 import { calculateIndividualPlanUpgradeRecommendation, getIndividualLicenseMonthlyCost } from './utils/individualPlanUpgrade'
+import { useAppVersionCheck } from './hooks/useAppVersionCheck'
 
 type Status = 'idle' | 'processing' | 'done'
-type ActiveView = 'overview' | 'users' | 'userDetails' | 'costCenters' | 'orgs' | 'models' | 'products' | 'costManagement' | 'guide' | 'faq'
-
-const EMPTY_BUDGET_VALUES: BudgetValues = {
-  user: '',
-  account: '',
-  productCloudAgent: '',
-  productSpark: '',
-  productCopilot: '',
-}
+type ActiveView = 'overview' | 'users' | 'userDetails' | 'costCenters' | 'orgs' | 'models' | 'products' | 'spendInsights' | 'costManagement' | 'guide' | 'faq'
 
 const BUSINESS_LICENSE_MONTHLY_COST = 19
 const ENTERPRISE_LICENSE_MONTHLY_COST = 39
+
 function App() {
   const [status, setStatus] = useState<Status>('idle')
   const [quickStats, setQuickStats] = useState<QuickStatsResult | null>(null)
@@ -68,6 +70,7 @@ function App() {
   const currentFileRef = useRef<File | null>(null)
   const latestRunIdRef = useRef(0)
   const latestSimulationIdRef = useRef(0)
+  const { isUpdateAvailable, reloadApp } = useAppVersionCheck()
 
   const applyProcessedData = useCallback(({
     quickStats,
@@ -112,7 +115,7 @@ function App() {
     const orgAggregator = new OrganizationAggregator()
     const userAggregator = new UserUsageAggregator()
 
-    await runPipeline(file, [
+    const pipelineResult = await runPipeline(file, [
       statsAggregator,
       contextAggregator,
       dailyAggregator,
@@ -128,7 +131,10 @@ function App() {
     })
 
     return {
-      quickStats: statsAggregator.result(),
+      quickStats: {
+        ...statsAggregator.result(),
+        lineCount: pipelineResult.reportRowCount,
+      },
       reportContext: contextAggregator.result(),
       dailyUsageData: dailyAggregator.result().dailyData,
       modelUsage: modelAggregator.result(),
@@ -202,6 +208,7 @@ function App() {
 
       setProgress(100)
       applyProcessedData(nextData)
+      setBudgetValues(getDefaultBudgetValues(nextData.userUsage.users))
       setStatus('done')
     } catch (err) {
       if (runId !== latestRunIdRef.current) return
@@ -292,6 +299,8 @@ function App() {
     const isIndividualBudgetReport = inferReportPlanScope(budgetReportUsers.length, hasBudgetOrganizationContext) === 'individual'
     const parsedAccountBudget = budgetValues.account.trim() === '' ? undefined : Number(budgetValues.account)
     const parsedUserBudget = !isIndividualBudgetReport && budgetValues.user.trim() !== '' ? Number(budgetValues.user) : undefined
+    const parsedPowerUserBudget = !isIndividualBudgetReport && budgetValues.powerUser.trim() !== '' ? Number(budgetValues.powerUser) : undefined
+    const parsedHeavyUserBudget = !isIndividualBudgetReport && budgetValues.heavyUser.trim() !== '' ? Number(budgetValues.heavyUser) : undefined
     const parsedProductCloudAgentBudget = !isIndividualBudgetReport && budgetValues.productCloudAgent.trim() !== '' ? Number(budgetValues.productCloudAgent) : undefined
     const parsedProductSparkBudget = !isIndividualBudgetReport && budgetValues.productSpark.trim() !== '' ? Number(budgetValues.productSpark) : undefined
     const parsedProductCopilotBudget = !isIndividualBudgetReport && budgetValues.productCopilot.trim() !== '' ? Number(budgetValues.productCopilot) : undefined
@@ -299,6 +308,8 @@ function App() {
     if (
       parsedAccountBudget === undefined
       && parsedUserBudget === undefined
+      && parsedPowerUserBudget === undefined
+      && parsedHeavyUserBudget === undefined
       && parsedProductCloudAgentBudget === undefined
       && parsedProductSparkBudget === undefined
       && parsedProductCopilotBudget === undefined
@@ -313,6 +324,8 @@ function App() {
     if (
       (parsedAccountBudget !== undefined && !Number.isFinite(parsedAccountBudget))
       || (parsedUserBudget !== undefined && !Number.isFinite(parsedUserBudget))
+      || (parsedPowerUserBudget !== undefined && !Number.isFinite(parsedPowerUserBudget))
+      || (parsedHeavyUserBudget !== undefined && !Number.isFinite(parsedHeavyUserBudget))
       || (parsedProductCloudAgentBudget !== undefined && !Number.isFinite(parsedProductCloudAgentBudget))
       || (parsedProductSparkBudget !== undefined && !Number.isFinite(parsedProductSparkBudget))
       || (parsedProductCopilotBudget !== undefined && !Number.isFinite(parsedProductCopilotBudget))
@@ -332,6 +345,11 @@ function App() {
         {
           accountBudgetUsd: parsedAccountBudget,
           userBudgetUsd: parsedUserBudget,
+          userBudgetUsdBySpendSegment: {
+            power: parsedPowerUserBudget,
+            heavy: parsedHeavyUserBudget,
+          },
+          userSpendSegmentsByUsername: getUserSpendSegmentsByUsername(budgetReportUsers),
           productBudgetsUsd: {
             [PRODUCT_BUDGET_COPILOT_CLOUD_AGENT]: parsedProductCloudAgentBudget,
             [PRODUCT_BUDGET_SPARK]: parsedProductSparkBudget,
@@ -354,6 +372,8 @@ function App() {
     }
   }, [
     budgetValues.account,
+    budgetValues.heavyUser,
+    budgetValues.powerUser,
     budgetValues.productCloudAgent,
     budgetValues.productCopilot,
     budgetValues.productSpark,
@@ -437,14 +457,19 @@ function App() {
   const licenseSeatCounts = reportPlanScope === 'organization'
     ? { business: effectiveBusinessSeats, enterprise: effectiveEnterpriseSeats }
     : undefined
+  const includedAicPoolSize = reportPlanScope === 'organization'
+    ? (effectiveBusinessSeats * BUSINESS_MONTHLY_AIC_INCLUDED_CREDITS) + (effectiveEnterpriseSeats * ENTERPRISE_MONTHLY_AIC_INCLUDED_CREDITS)
+    : calculateLicenseSummary(reportUsers).totalIncludedAic
 
   const selectedUser = individualUser
     ?? (selectedUsername && userUsage
       ? userUsage.users.find((user) => user.username === selectedUsername) ?? null
       : null)
+  const canShowSpendInsights = Boolean(userUsage) && !isIndividualReport && reportUsers.length > 1
+  const visibleActiveView = activeView === 'spendInsights' && !canShowSpendInsights ? 'overview' : activeView
   const userNavActive = isIndividualReport
-    ? activeView === 'userDetails'
-    : activeView === 'users' || activeView === 'userDetails'
+    ? visibleActiveView === 'userDetails'
+    : visibleActiveView === 'users' || visibleActiveView === 'userDetails'
   const openUserView = () => {
     if (isIndividualReport) {
       setActiveView('userDetails')
@@ -543,7 +568,7 @@ function App() {
               <nav className="bg-bg-default border border-border-default rounded-lg p-[6px] flex flex-col gap-[2px] max-sm:border-0 max-sm:p-[2px]">
                 <button
                   type="button"
-                  className={`${sidebarItemBase} ${activeView === 'overview' ? sidebarActive : sidebarInactive}`}
+                  className={`${sidebarItemBase} ${visibleActiveView === 'overview' ? sidebarActive : sidebarInactive}`}
                   onClick={() => setActiveView('overview')}
                 >
                   <GraphIcon size={18} className="shrink-0" aria-hidden />
@@ -563,7 +588,7 @@ function App() {
                 {modelUsage && modelUsage.models.length > 0 && (
                   <button
                     type="button"
-                    className={`${sidebarItemBase} ${activeView === 'models' ? sidebarActive : sidebarInactive}`}
+                    className={`${sidebarItemBase} ${visibleActiveView === 'models' ? sidebarActive : sidebarInactive}`}
                     onClick={() => setActiveView('models')}
                   >
                     <CopilotIcon size={18} className="shrink-0" aria-hidden />
@@ -573,7 +598,7 @@ function App() {
 
                 <button
                   type="button"
-                  className={`${sidebarItemBase} ${activeView === 'products' ? sidebarActive : sidebarInactive}`}
+                  className={`${sidebarItemBase} ${visibleActiveView === 'products' ? sidebarActive : sidebarInactive}`}
                   onClick={() => setActiveView('products')}
                 >
                   <TableIcon size={18} className="shrink-0" aria-hidden />
@@ -583,7 +608,7 @@ function App() {
                 {orgs && orgs.organizations.length > 0 && (
                   <button
                     type="button"
-                    className={`${sidebarItemBase} ${activeView === 'orgs' ? sidebarActive : sidebarInactive}`}
+                    className={`${sidebarItemBase} ${visibleActiveView === 'orgs' ? sidebarActive : sidebarInactive}`}
                     onClick={() => setActiveView('orgs')}
                   >
                     <OrganizationIcon size={18} className="shrink-0" aria-hidden />
@@ -594,7 +619,7 @@ function App() {
                 {costCenters && costCenters.costCenters.length > 0 && (
                   <button
                     type="button"
-                    className={`${sidebarItemBase} ${activeView === 'costCenters' ? sidebarActive : sidebarInactive}`}
+                    className={`${sidebarItemBase} ${visibleActiveView === 'costCenters' ? sidebarActive : sidebarInactive}`}
                     onClick={() => setActiveView('costCenters')}
                   >
                     <DatabaseIcon size={18} className="shrink-0" aria-hidden />
@@ -602,9 +627,20 @@ function App() {
                   </button>
                 )}
 
+                {canShowSpendInsights && (
+                  <button
+                    type="button"
+                    className={`${sidebarItemBase} ${visibleActiveView === 'spendInsights' ? sidebarActive : sidebarInactive}`}
+                    onClick={() => setActiveView('spendInsights')}
+                  >
+                    <GraphIcon size={18} className="shrink-0" aria-hidden />
+                    <span className="whitespace-nowrap overflow-hidden text-ellipsis max-sm:sr-only">Spend Insights</span>
+                  </button>
+                )}
+
                 <button
                   type="button"
-                  className={`${sidebarItemBase} ${activeView === 'costManagement' ? sidebarActive : sidebarInactive}`}
+                  className={`${sidebarItemBase} ${visibleActiveView === 'costManagement' ? sidebarActive : sidebarInactive}`}
                   onClick={() => setActiveView('costManagement')}
                 >
                   <CreditCardIcon size={18} className="shrink-0" aria-hidden />
@@ -615,7 +651,7 @@ function App() {
 
                 <button
                   type="button"
-                  className={`${sidebarItemBase} ${activeView === 'guide' ? sidebarActive : sidebarInactive}`}
+                  className={`${sidebarItemBase} ${visibleActiveView === 'guide' ? sidebarActive : sidebarInactive}`}
                   onClick={() => setActiveView('guide')}
                 >
                   <InfoIcon size={18} className="shrink-0" aria-hidden />
@@ -624,7 +660,7 @@ function App() {
 
                 <button
                   type="button"
-                  className={`${sidebarItemBase} ${activeView === 'faq' ? sidebarActive : sidebarInactive}`}
+                  className={`${sidebarItemBase} ${visibleActiveView === 'faq' ? sidebarActive : sidebarInactive}`}
                   onClick={() => setActiveView('faq')}
                 >
                   <QuestionIcon size={18} className="shrink-0" aria-hidden />
@@ -634,7 +670,7 @@ function App() {
             </aside>
 
             <main className="flex-1 min-w-0 flex flex-col">
-            {activeView === 'overview' ? (
+            {visibleActiveView === 'overview' ? (
               <OverviewView
                 error={error}
                 fileName={fileName}
@@ -646,7 +682,7 @@ function App() {
                 reportPlanScope={reportPlanScope}
                 upgradeRecommendation={individualUpgradeRecommendation}
               />
-            ) : activeView === 'models' ? (
+            ) : visibleActiveView === 'models' ? (
               modelUsage && modelUsage.models.length > 0 ? (
                 <div className={viewContentClasses}>
                   <ModelsView
@@ -657,7 +693,7 @@ function App() {
                   />
                 </div>
               ) : null
-            ) : activeView === 'users' && !isIndividualReport ? (
+            ) : visibleActiveView === 'users' && !isIndividualReport ? (
                 <div className={viewContentClasses}>
                   <UsersView
                     users={reportUsers}
@@ -671,7 +707,7 @@ function App() {
                    }}
                  />
                </div>
-               ) : activeView === 'userDetails' || (activeView === 'users' && isIndividualReport) ? (
+                ) : visibleActiveView === 'userDetails' || (visibleActiveView === 'users' && isIndividualReport) ? (
                  <div className={viewContentClasses}>
                     <UserDetailsView
                        user={selectedUser}
@@ -682,17 +718,27 @@ function App() {
                      onBackToUsers={isIndividualReport ? undefined : () => setActiveView('users')}
                    />
                  </div>
-              ) : activeView === 'costCenters' ? (
+               ) : visibleActiveView === 'costCenters' ? (
               <div className={viewContentClasses}>
                 <CostCentersView data={costCenters ?? { costCenters: [] }} rangeStart={rangeStart} />
               </div>
-             ) : activeView === 'products' ? (
-               <div className={viewContentClasses}>
-                 <ProductsView data={productUsage ?? { products: [] }} />
-               </div>
-             ) : activeView === 'costManagement' ? (
-               <div className={viewContentClasses}>
-                  <CostManagementView
+               ) : visibleActiveView === 'products' ? (
+                <div className={viewContentClasses}>
+                  <ProductsView data={productUsage ?? { products: [] }} />
+                </div>
+               ) : visibleActiveView === 'spendInsights' ? (
+                <div className={viewContentClasses}>
+                  <SpendInsightsView
+                    users={reportUsers}
+                    onSelectUser={(username) => {
+                      setSelectedUsername(username)
+                      setActiveView('userDetails')
+                    }}
+                  />
+                </div>
+               ) : visibleActiveView === 'costManagement' ? (
+                <div className={viewContentClasses}>
+                   <CostManagementView
                     budgetValues={budgetValues}
                     isIndividualReport={isIndividualReport}
                     currentPruBill={overviewPruNetAmount}
@@ -703,6 +749,7 @@ function App() {
                     currentAicGrossAmount={overviewTotals.aicGrossAmount}
                     currentAicDiscountAmount={overviewAicDiscountAmount}
                     currentAicQuantity={overviewTotals.aicQuantity}
+                    includedAicPoolSize={includedAicPoolSize}
                     licenseAmount={licenseAmount}
                     licenseSeatCounts={licenseSeatCounts}
                     upgradeRecommendation={individualUpgradeRecommendation}
@@ -714,11 +761,11 @@ function App() {
                     onApplyBudgetSimulation={handleApplyBudgetSimulation}
                   />
                 </div>
-             ) : activeView === 'guide' ? (
+             ) : visibleActiveView === 'guide' ? (
                <div className={viewContentClasses}>
                  <ReportGuideView />
               </div>
-            ) : activeView === 'faq' ? (
+            ) : visibleActiveView === 'faq' ? (
               <div className={viewContentClasses}>
                 <FaqView />
               </div>
@@ -752,6 +799,8 @@ function App() {
           Something is not right? <a href={appLinks.issues} target="_blank" rel="noopener noreferrer">Submit an issue</a>.
         </footer>
       )}
+
+      <NewVersionBanner isVisible={isUpdateAvailable} onReload={reloadApp} />
     </div>
   )
 }

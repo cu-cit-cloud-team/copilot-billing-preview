@@ -5,7 +5,8 @@ import type { UserDailyUsage, UserUsage } from '../pipeline/aggregators/userUsag
 import { calculateAicDiscountAmount, calculateSavingsDifference } from '../utils/billingComparison'
 import { fillDataForRange } from '../utils/fillDataForRange'
 import { formatAic } from '../utils/format'
-import { BillingProjectionDisclaimer, NegotiatedDiscountDisclaimer, PromotionalDataDisclaimer } from '../components/ui'
+import { getUserSpendSegmentLabel } from '../utils/userSpendSegments'
+import { BillingProjectionDisclaimer, ExistingDiscountDisclaimer, PromotionalDataDisclaimer } from '../components/ui'
 import { th, thNum, td, tdNum } from '../components/ui/tableStyles'
 
 type DailySummaryModelRow = {
@@ -178,7 +179,8 @@ export function UserDetailsView({
   const aicDiscountAmount = user ? calculateAicDiscountAmount(user.totals.aicGrossAmount, user.totals.aicNetAmount) : 0
   const savings = user ? calculateSavingsDifference(user.totals.netAmount, user.totals.aicNetAmount) : 0
   const planLabel = user ? getPlanLabel(user.totalMonthlyQuota, reportPlanScope) : null
-  const showNegotiatedDiscountDisclaimer = reportPlanScope !== 'individual'
+  const showExistingDiscountDisclaimer = reportPlanScope !== 'individual'
+  const spendSegmentLabel = user && showExistingDiscountDisclaimer ? getUserSpendSegmentLabel(user.spendSegment) : null
 
   if (!user) {
     return (
@@ -218,6 +220,7 @@ export function UserDetailsView({
         </div>
 
         <div className="flex items-center gap-3 gap-y-2 flex-wrap">
+          {spendSegmentLabel && <span className="text-sm text-fg-muted whitespace-nowrap [&:not(:last-child)]:after:content-['|'] [&:not(:last-child)]:after:ml-3 [&:not(:last-child)]:after:text-fg-muted">Spend group: {spendSegmentLabel}</span>}
           {planLabel && <span className="text-sm text-fg-muted whitespace-nowrap [&:not(:last-child)]:after:content-['|'] [&:not(:last-child)]:after:ml-3 [&:not(:last-child)]:after:text-fg-muted">Plan: {planLabel}</span>}
           {user.organizations.length > 0 && <span className="text-sm text-fg-muted whitespace-nowrap [&:not(:last-child)]:after:content-['|'] [&:not(:last-child)]:after:ml-3 [&:not(:last-child)]:after:text-fg-muted">Organizations: {joinValues(user.organizations)}</span>}
           {user.costCenters.length > 0 && <span className="text-sm text-fg-muted whitespace-nowrap [&:not(:last-child)]:after:content-['|'] [&:not(:last-child)]:after:ml-3 [&:not(:last-child)]:after:text-fg-muted">Cost Centers: {joinValues(user.costCenters)}</span>}
@@ -257,18 +260,18 @@ export function UserDetailsView({
               <div className="text-xs text-fg-muted mt-1">1 PRU = $0.04</div>
               <div className="mt-4 pt-3 border-t border-border-default w-full flex flex-col gap-1.5 text-left">
                 <div className="flex justify-between items-center text-[13px] text-fg-default tabular-nums">
-                  <span>Consumed (PRUs)</span>
+                  <span>Consumed PRUs</span>
                   <span>{formatCost(user.totals.grossAmount)}</span>
                 </div>
                 <div className="flex justify-between items-center text-[13px] text-fg-muted tabular-nums">
-                  <span>Discount (included PRUs)</span>
+                  <span>Included PRUs</span>
                   <span>−{formatCost(user.totals.discountAmount)}</span>
                 </div>
                 <div className="flex justify-between items-center text-[13px] text-fg-default tabular-nums pt-1.5 border-t border-border-default font-semibold">
                   <span>Overages</span>
                   <span>{formatCost(user.totals.netAmount)}</span>
                 </div>
-                {showNegotiatedDiscountDisclaimer && <NegotiatedDiscountDisclaimer />}
+                {showExistingDiscountDisclaimer && <ExistingDiscountDisclaimer />}
               </div>
             </div>
             <div className="bg-bg-default border border-border-default rounded-md px-5 py-7 text-center">
@@ -278,18 +281,18 @@ export function UserDetailsView({
               <div className="text-xs text-fg-muted mt-1">1 AIC = $0.01</div>
               <div className="mt-4 pt-3 border-t border-border-default w-full flex flex-col gap-1.5 text-left">
                 <div className="flex justify-between items-center text-[13px] text-fg-default tabular-nums">
-                  <span>Consumed (AICs)</span>
+                  <span>Consumed AICs</span>
                   <span>{formatCost(user.totals.aicGrossAmount)}</span>
                 </div>
                 <div className="flex justify-between items-center text-[13px] text-fg-muted tabular-nums">
-                  <span>Discount (included AICs)</span>
+                  <span>Included AICs</span>
                   <span>−{formatCost(aicDiscountAmount)}</span>
                 </div>
                 <div className="flex justify-between items-center text-[13px] text-fg-default tabular-nums pt-1.5 border-t border-border-default font-semibold">
                   <span>Additional usage</span>
                   <span>{formatCost(user.totals.aicNetAmount)}</span>
                 </div>
-                {showNegotiatedDiscountDisclaimer ? <NegotiatedDiscountDisclaimer /> : <PromotionalDataDisclaimer />}
+                {showExistingDiscountDisclaimer ? <ExistingDiscountDisclaimer /> : <PromotionalDataDisclaimer />}
               </div>
             </div>
           </div>

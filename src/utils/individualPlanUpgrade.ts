@@ -3,8 +3,8 @@ import {
   PRO_MONTHLY_AIC_INCLUDED_CREDITS,
   PRO_PLUS_MONTHLY_AIC_INCLUDED_CREDITS,
 } from '../pipeline/aicIncludedCredits'
+import { AIC_UNIT_PRICE_USD } from './billingConstants'
 
-export const AIC_UNIT_PRICE_USD = 0.01
 export const PRO_LICENSE_MONTHLY_COST = 10
 export const PRO_PLUS_LICENSE_MONTHLY_COST = 39
 export const MAX_LICENSE_MONTHLY_COST = 100

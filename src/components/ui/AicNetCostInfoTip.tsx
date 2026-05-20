@@ -1,6 +1,6 @@
 import { InfoTip } from '../InfoTip'
 
-const AIC_NET_COST_INFO = 'All values are provided without any additional negotiated discounts applied.'
+const AIC_NET_COST_INFO = 'All values are provided without any existing discounts.'
 
 export function AicNetCostInfoTip() {
   return (

@@ -1,6 +1,12 @@
 import type { Aggregator } from './aggregators/base'
 import { createAicIncludedCreditsAllocator, type AicIncludedCreditsOverrides } from './aicIncludedCredits'
-import { parseTokenUsageHeader, parseTokenUsageRecord, validateHeader, type TokenUsageHeader, type TokenUsageRecord } from './parser'
+import {
+  parseTokenUsageHeader,
+  parseNormalizedTokenUsageRecord,
+  validateHeader,
+  type TokenUsageHeader,
+  type TokenUsageRecord,
+} from './parser'
 import { streamLines, type StreamProgress } from './streamer'
 
 async function validateFileHeader(file: File): Promise<void> {
@@ -25,6 +31,11 @@ export interface PipelineOptions {
   includedCreditsOverrides?: AicIncludedCreditsOverrides
   progressResolution?: number
   onProgress?: (progress: PipelineProgress) => void
+}
+
+export interface PipelineResult {
+  reportRowCount: number
+  processedRowCount: number
 }
 
 const ANALYSIS_PROGRESS_WEIGHT = 0.4
@@ -54,7 +65,7 @@ export async function runPipeline(
   file: File,
   aggregators: Aggregator<TokenUsageRecord, unknown, TokenUsageHeader>[],
   options?: PipelineOptions,
-): Promise<void> {
+): Promise<PipelineResult> {
   const { includedCreditsOverrides = {}, progressResolution = 500, onProgress } = options ?? {}
   await validateFileHeader(file)
   let lastProgressStage: PipelineProgress['stage'] | null = null
@@ -108,6 +119,7 @@ export async function runPipeline(
     },
   })
   let header: TokenUsageHeader | null = null
+  let reportRowCount = 0
   let rowIndex = 0
   let latestStreamProgress: StreamProgress = {
     bytesProcessed: 0,
@@ -129,7 +141,11 @@ export async function runPipeline(
       continue
     }
 
-    const record = aicIncludedCreditAllocator.apply(parseTokenUsageRecord(trimmed, header))
+    const normalizedRecord = parseNormalizedTokenUsageRecord(trimmed, header)
+    reportRowCount += 1
+    if (!normalizedRecord) continue
+
+    const record = aicIncludedCreditAllocator.apply(normalizedRecord)
     aggregators.forEach((aggregator) => aggregator.accumulate(record, rowIndex))
     rowIndex += 1
 
@@ -149,5 +165,10 @@ export async function runPipeline(
       bytesProcessed: file.size,
       totalBytes: file.size,
     }, true)
+  }
+
+  return {
+    reportRowCount,
+    processedRowCount: rowIndex,
   }
 }

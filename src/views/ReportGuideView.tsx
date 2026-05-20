@@ -10,6 +10,7 @@ const HEADER = [
   'gross_amount',
   'discount_amount',
   'net_amount',
+  'exceeds_quota',
   'total_monthly_quota',
   'organization',
   'cost_center_name',
@@ -29,6 +30,7 @@ const SAMPLE_ROW_1 = [
   '0.036000000000000004',
   '0.036000000000000004',
   '0',
+  'FALSE',
   '1000',
   'octodemo',
   'Octocats',
@@ -48,11 +50,32 @@ const SAMPLE_ROW_2 = [
   '0',
   '0',
   '0',
-  '1000',
+  'FALSE',
+  '0',
   'octodemo',
   'Octocats',
   '24.9364',
   '0.24936400000000003',
+]
+
+const SAMPLE_ROW_3 = [
+  '2026-04-15',
+  'mona',
+  'copilot',
+  'copilot_premium_request',
+  'Claude Haiku 4.5',
+  '0',
+  'requests',
+  '0.04',
+  '0',
+  '0',
+  '0',
+  'FALSE',
+  '0',
+  '',
+  '',
+  '59.167109999999994',
+  '0.5916711000000002',
 ]
 
 const SAMPLE_ROW_2_ANNOTATIONS: { index: number; label: string; note: string }[] = [
@@ -83,14 +106,72 @@ const SAMPLE_ROW_2_ANNOTATIONS: { index: number; label: string; note: string }[]
     note: '$0 — there is no PRU cost to discount.',
   },
   {
-    index: 14,
+    index: 11,
+    label: 'exceeds_quota',
+    note: 'FALSE — Base Model requests are not billable in PRU terms, so this defaults to FALSE.',
+  },
+  {
+    index: 12,
+    label: 'total_monthly_quota',
+    note: '0 PRUs — monthly quota is not applicable to Base Model requests, so it defaults to zero.',
+  },
+  {
+    index: 15,
     label: 'aic_quantity',
     note: '≈ 24.9 AICs consumed. Under usage-based billing, even Base Models consume AI Credits proportional to actual token usage.',
   },
   {
-    index: 15,
+    index: 16,
     label: 'aic_gross_amount',
     note: '≈ $0.249 (24.9 AICs × $0.01). This is what the same usage would cost under usage-based billing.',
+  },
+]
+
+const SAMPLE_ROW_3_ANNOTATIONS: { index: number; label: string; note: string }[] = [
+  {
+    index: 4,
+    label: 'model',
+    note: '"Claude Haiku 4.5" — the model used by the Copilot subagent.',
+  },
+  {
+    index: 5,
+    label: 'quantity',
+    note: '0 PRUs. Subagent usage was not billable under PRU billing, so no Premium Request quantity is recorded even though work occurred.',
+  },
+  {
+    index: 6,
+    label: 'unit_type',
+    note: '"requests" — this row comes from the Premium Request report shape, but the recorded PRU quantity is 0.',
+  },
+  {
+    index: 7,
+    label: 'applied_cost_per_quantity',
+    note: '$0.04 per PRU — the standard PRU rate. Because quantity is 0, the PRU gross amount remains $0.',
+  },
+  {
+    index: 8,
+    label: 'gross_amount',
+    note: '$0 gross PRU cost (0 PRUs × $0.04).',
+  },
+  {
+    index: 11,
+    label: 'exceeds_quota',
+    note: 'FALSE — Subagent usage is not billable in PRU terms, so it defaults to FALSE.',
+  },
+  {
+    index: 12,
+    label: 'total_monthly_quota',
+    note: '0 PRUs — monthly quota is not applicable to Subagent calls, so it defaults to zero.',
+  },
+  {
+    index: 15,
+    label: 'aic_quantity',
+    note: '≈ 59.2 AICs consumed. Under usage-based billing, subagents consume AI Credits based on actual usage.',
+  },
+  {
+    index: 16,
+    label: 'aic_gross_amount',
+    note: '≈ $0.592 (59.2 AICs × $0.01). This is the AI Credits cost for the subagent work.',
   },
 ]
 
@@ -130,16 +211,21 @@ const SAMPLE_ROW_1_ANNOTATIONS: { index: number; label: string; note: string }[]
     label: 'net_amount',
     note: '$0.00 — net PRU charge after quota discount. No additional cost was incurred for this request.',
   },
-  { index: 11, label: 'total_monthly_quota', note: '1,000 PRUs — the monthly PRU quota for this user\'s plan.' },
-  { index: 12, label: 'organization', note: 'The GitHub organization slug: "octodemo".' },
-  { index: 13, label: 'cost_center_name', note: '"Octocats" — the cost center this user is assigned to.' },
   {
-    index: 14,
+    index: 11,
+    label: 'exceeds_quota',
+    note: 'FALSE — tracked for requests that are billable in PRU terms. TRUE means the user used up their included number of Premium Requests; FALSE means they stayed within the included allowance. For non-billable events like Base Model and Subagent calls, this value defaults to FALSE.',
+  },
+  { index: 12, label: 'total_monthly_quota', note: '1,000 PRUs — the monthly PRU quota for this user\'s plan.' },
+  { index: 13, label: 'organization', note: 'The GitHub organization slug: "octodemo".' },
+  { index: 14, label: 'cost_center_name', note: '"Octocats" — the cost center this user is assigned to.' },
+  {
+    index: 15,
     label: 'aic_quantity',
     note: '≈ 3.107 AICs — the usage-based billing equivalent of this request. AICs represent the actual tokens consumed.',
   },
   {
-    index: 15,
+    index: 16,
     label: 'aic_gross_amount',
     note: '≈ $0.031 (3.107 AICs × $0.01). Under usage-based billing this request would cost roughly $0.03.',
   },
@@ -189,15 +275,10 @@ function AnnotatedRow({ header, values, annotations }: {
 export function ReportGuideView() {
   return (
     <section className="max-w-[960px]">
-      <h2 className="text-lg font-semibold text-fg-default mb-2">Report Format</h2>
+      <h2 className="m-0 text-lg text-fg-default mb-2">Report Format</h2>
       <p className="text-fg-muted text-sm mb-7">
         Each row in the CSV export represents one unit of Copilot usage for a single user and model on a given day.
-        Below are annotated examples showing what each field means. Some older exports also include an
-        <code className="mx-1 font-mono text-xs">exceeds_quota</code>
-        column between
-        <code className="mx-1 font-mono text-xs">net_amount</code>
-        and
-        <code className="mx-1 font-mono text-xs">total_monthly_quota</code>.
+        Below are annotated examples showing what each field means.
       </p>
 
       <div className="bg-bg-default border border-border-default rounded-lg px-6 pt-5 pb-6 mb-6">
@@ -225,6 +306,19 @@ export function ReportGuideView() {
         </p>
 
         <AnnotatedRow header={HEADER} values={SAMPLE_ROW_2} annotations={SAMPLE_ROW_2_ANNOTATIONS} />
+      </div>
+
+      <div className="bg-bg-default border border-border-default rounded-lg px-6 pt-5 pb-6 mb-6">
+        <h3 className="text-base font-semibold text-fg-default mb-2">Example: Subagent usage with 0 Premium Requests</h3>
+        <p className="text-sm text-fg-muted leading-relaxed mb-5">
+          On <strong>15 April 2026</strong>, user <strong>mona</strong> triggered a Copilot subagent using{' '}
+          <strong>Claude Haiku 4.5</strong>. Subagents were not billable under PRU billing, so the row shows{' '}
+          <strong>0</strong> in the <code className="font-mono text-xs">quantity</code> column and a{' '}
+          <strong>$0.00</strong> PRU cost. Under usage-based billing, however, the same subagent work consumed{' '}
+          <strong>≈ 59.2 AICs</strong>, producing an AI Credits cost of approximately <strong>$0.592</strong>.
+        </p>
+
+        <AnnotatedRow header={HEADER} values={SAMPLE_ROW_3} annotations={SAMPLE_ROW_3_ANNOTATIONS} />
       </div>
     </section>
   )

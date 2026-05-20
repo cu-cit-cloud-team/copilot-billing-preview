@@ -1,23 +1,28 @@
 import { calculateAicIncludedCreditsContext, getUsageMonthKey, type AicIncludedCreditsContext, type AicIncludedCreditsOverrides } from '../pipeline/aicIncludedCredits'
-import { getAicUsageMetrics, getUsageMetrics, parseTokenUsageHeader, parseTokenUsageRecord, type TokenUsageHeader, type TokenUsageRecord } from '../pipeline/parser'
+import { getAicUsageMetrics, getUsageMetrics, parseNormalizedTokenUsageRecord, parseTokenUsageHeader, type TokenUsageHeader, type TokenUsageRecord } from '../pipeline/parser'
 import { getProductBudgetName, isNonCopilotCodeReviewUsage, NON_COPILOT_CODE_REVIEW_USER_LABEL, type ProductBudgetName } from '../pipeline/productClassification'
 import { streamLines } from '../pipeline/streamer'
+import type { UserSpendSegmentId } from './userSpendSegments'
 
 export type BudgetSimulationResult = {
   totalBill: number
   blockedUsers: number
   blockedRequests: number
   blockedIncludedCreditsAic: number
+  allowedAicQuantity: number
   budgetExhausted: boolean
   firstUserBlockedDate: string | null
   accountBlockedDate: string | null
   productBlockedDates: Partial<Record<ProductBudgetName, string>>
   adjustedDailyNetCostByDate: Array<{ date: string; amount: number }>
+  adjustedDailyGrossCostByDate: Array<{ date: string; amount: number }>
 }
 
 export type BudgetSimulationOptions = {
   accountBudgetUsd?: number
   userBudgetUsd?: number
+  userBudgetUsdBySpendSegment?: Partial<Record<UserSpendSegmentId, number>>
+  userSpendSegmentsByUsername?: Record<string, UserSpendSegmentId>
   productBudgetsUsd?: Partial<Record<ProductBudgetName, number>>
 }
 
@@ -25,9 +30,12 @@ type BudgetSimulationContext = Pick<AicIncludedCreditsContext, 'reportPlanScope'
 type BudgetSimulationState = {
   remainingAccountBudget: number
   userBudgetCap: number
+  userBudgetCapBySpendSegment: Map<UserSpendSegmentId, number>
+  userSpendSegmentsByUsername: Map<string, UserSpendSegmentId>
   remainingProductBudgetByName: Map<ProductBudgetName, number>
   remainingOrganizationIncludedCredits: number
   totalBill: number
+  allowedAicQuantity: number
   blockedRequests: number
   budgetExhausted: boolean
   firstUserBlockedDate: string | null
@@ -35,6 +43,7 @@ type BudgetSimulationState = {
   productBlockedDates: Partial<Record<ProductBudgetName, string>>
   blockedUsers: Set<string>
   adjustedDailyNetCostByDate: Map<string, number>
+  adjustedDailyGrossCostByDate: Map<string, number>
   remainingUserBudgetByUser: Map<string, number>
   remainingMonthlyIncludedCredits: Map<string, number>
   seenIndividualIncludedCreditKeys: Set<string>
@@ -43,6 +52,16 @@ type BudgetSimulationState = {
 function normalizeBudget(value: number | undefined): number {
   if (value === undefined || !Number.isFinite(value)) return Number.POSITIVE_INFINITY
   return Math.max(value, 0)
+}
+
+function createSpendSegmentBudgetCaps(
+  budgets: Partial<Record<UserSpendSegmentId, number>> | undefined,
+): Map<UserSpendSegmentId, number> {
+  return new Map<UserSpendSegmentId, number>(
+    Object.entries(budgets ?? {})
+      .filter((entry): entry is [UserSpendSegmentId, number] => entry[1] !== undefined && Number.isFinite(entry[1]))
+      .map(([segment, amount]) => [segment, normalizeBudget(amount)]),
+  )
 }
 
 function getMaxQuantityByAdditionalSpendBudget(
@@ -88,10 +107,13 @@ function createBudgetSimulationState(
   return {
     remainingAccountBudget: normalizeBudget(options.accountBudgetUsd),
     userBudgetCap: normalizeBudget(options.userBudgetUsd),
+    userBudgetCapBySpendSegment: createSpendSegmentBudgetCaps(options.userBudgetUsdBySpendSegment),
+    userSpendSegmentsByUsername: new Map<string, UserSpendSegmentId>(Object.entries(options.userSpendSegmentsByUsername ?? {})),
     remainingProductBudgetByName: new Map<ProductBudgetName, number>(Object.entries(options.productBudgetsUsd ?? {})
       .map(([name, amount]) => [name as ProductBudgetName, normalizeBudget(amount)])),
     remainingOrganizationIncludedCredits: context.organizationIncludedCreditsPool,
     totalBill: 0,
+    allowedAicQuantity: 0,
     blockedRequests: 0,
     budgetExhausted: false,
     firstUserBlockedDate: null,
@@ -99,10 +121,24 @@ function createBudgetSimulationState(
     productBlockedDates: {},
     blockedUsers: new Set<string>(),
     adjustedDailyNetCostByDate: new Map<string, number>(),
+    adjustedDailyGrossCostByDate: new Map<string, number>(),
     remainingUserBudgetByUser: new Map<string, number>(),
     remainingMonthlyIncludedCredits: new Map<string, number>(),
     seenIndividualIncludedCreditKeys: new Set<string>(),
   }
+}
+
+function getUserBudgetCap(state: BudgetSimulationState, budgetSubject: string | null): number {
+  if (!budgetSubject) {
+    return Number.POSITIVE_INFINITY
+  }
+
+  const segment = state.userSpendSegmentsByUsername.get(budgetSubject)
+  if (!segment) {
+    return state.userBudgetCap
+  }
+
+  return state.userBudgetCapBySpendSegment.get(segment) ?? state.userBudgetCap
 }
 
 function getRemainingIncludedCredits(
@@ -169,9 +205,10 @@ function simulateBudgetRecord(
       }
     }
 
-    const remainingUserBudget = state.userBudgetCap === Number.POSITIVE_INFINITY
+    const userBudgetCap = getUserBudgetCap(state, budgetSubject)
+    const remainingUserBudget = userBudgetCap === Number.POSITIVE_INFINITY
       ? Number.POSITIVE_INFINITY
-      : (budgetSubject ? (state.remainingUserBudgetByUser.get(budgetSubject) ?? state.userBudgetCap) : Number.POSITIVE_INFINITY)
+      : (budgetSubject ? (state.remainingUserBudgetByUser.get(budgetSubject) ?? userBudgetCap) : Number.POSITIVE_INFINITY)
     const remainingProductBudget = state.remainingProductBudgetByName.get(productBudgetName) ?? Number.POSITIVE_INFINITY
     const remainingIncludedCredits = getRemainingIncludedCredits(
       record,
@@ -235,6 +272,13 @@ function simulateBudgetRecord(
     const additionalUsageQuantity = Math.max(allowedQuantity - coveredQuantity, 0)
     const additionalSpendAmount = additionalUsageQuantity * costPerAic
 
+    state.allowedAicQuantity += allowedQuantity
+    if (allowedGrossAmount > 0 && record.date) {
+      state.adjustedDailyGrossCostByDate.set(
+        record.date,
+        (state.adjustedDailyGrossCostByDate.get(record.date) ?? 0) + allowedGrossAmount,
+      )
+    }
     state.totalBill += additionalSpendAmount
     if (additionalSpendAmount > 0 && record.date) {
       state.adjustedDailyNetCostByDate.set(record.date, (state.adjustedDailyNetCostByDate.get(record.date) ?? 0) + additionalSpendAmount)
@@ -302,11 +346,15 @@ function finalizeBudgetSimulation(
     blockedUsers: state.blockedUsers.size,
     blockedRequests: Math.round(state.blockedRequests),
     blockedIncludedCreditsAic,
+    allowedAicQuantity: state.allowedAicQuantity,
     budgetExhausted: state.budgetExhausted,
     firstUserBlockedDate: state.firstUserBlockedDate,
     accountBlockedDate: state.accountBlockedDate,
     productBlockedDates: state.productBlockedDates,
     adjustedDailyNetCostByDate: Array.from(state.adjustedDailyNetCostByDate.entries())
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([date, amount]) => ({ date, amount })),
+    adjustedDailyGrossCostByDate: Array.from(state.adjustedDailyGrossCostByDate.entries())
       .sort((a, b) => a[0].localeCompare(b[0]))
       .map(([date, amount]) => ({ date, amount })),
   }
@@ -344,7 +392,10 @@ export async function runBudgetSimulation(
       continue
     }
 
-    simulateBudgetRecord(state, parseTokenUsageRecord(trimmed, header), context)
+    const record = parseNormalizedTokenUsageRecord(trimmed, header)
+    if (!record) continue
+
+    simulateBudgetRecord(state, record, context)
   }
 
   return finalizeBudgetSimulation(state, context)
