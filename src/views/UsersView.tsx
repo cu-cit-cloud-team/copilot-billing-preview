@@ -11,25 +11,17 @@ import {
 import { calculateSavingsDifference } from '../utils/billingComparison'
 import { InfoTip, ValidationPopover } from '../components/InfoTip'
 import { formatAic, formatDifference } from '../utils/format'
+import { getSeatCountInputError, normalizeSeatCount, parseSeatCountInput } from '../utils/seatCounts'
 import { Trie } from '../utils/trie'
 import { th, thBase, thNum, td, tdNum, sortBtn } from '../components/ui/tableStyles'
 
 const PAGE_SIZE = 50
-const seatInputBaseClass = 'w-[90px] px-1.5 py-0.5 text-[13px] tabular-nums text-right border rounded-sm bg-bg-default focus:outline-none'
+const seatInputBaseClass = 'no-spin-number w-[90px] px-1.5 py-0.5 text-[13px] tabular-nums text-right border rounded-sm bg-bg-default focus:outline-none'
 const seatInputDefaultClass = `${seatInputBaseClass} border-border-default focus:border-fg-accent focus:shadow-[0_0_0_3px_rgba(9,105,218,0.3)]`
 const seatInputErrorClass = `${seatInputBaseClass} border-border-danger text-fg-danger focus:border-border-danger focus:shadow-[0_0_0_3px_rgba(207,34,46,0.3)]`
 
 function formatInt(n: number): string {
   return n.toLocaleString()
-}
-
-function getSeatReductionError(value: string, minimum: number): string | null {
-  if (value === '') return null
-
-  const parsed = Number(value)
-  if (!Number.isFinite(parsed) || Math.floor(parsed) >= minimum) return null
-
-  return `Cannot go below ${formatInt(minimum)} because that count comes from historical report data.`
 }
 
 function formatCost(n: number): string {
@@ -83,13 +75,15 @@ export function UsersView({ users, seatOverrides = {}, onSeatOverridesChange, on
   const savedEnterprise = seatOverrides.enterprise ?? defaultEnterprise
   const hasSavedOverride = seatOverrides.business !== undefined || seatOverrides.enterprise !== undefined
 
-  const displayBusiness = isEditing ? (draftBusiness !== '' ? parseInt(draftBusiness, 10) || 0 : savedBusiness) : savedBusiness
-  const displayEnterprise = isEditing ? (draftEnterprise !== '' ? parseInt(draftEnterprise, 10) || 0 : savedEnterprise) : savedEnterprise
+  const parsedDraftBusiness = parseSeatCountInput(draftBusiness)
+  const parsedDraftEnterprise = parseSeatCountInput(draftEnterprise)
+  const displayBusiness = isEditing ? normalizeSeatCount(parsedDraftBusiness ?? savedBusiness, defaultBusiness) : savedBusiness
+  const displayEnterprise = isEditing ? normalizeSeatCount(parsedDraftEnterprise ?? savedEnterprise, defaultEnterprise) : savedEnterprise
   const businessSeatError = isEditing
-    ? getSeatReductionError(draftBusiness, defaultBusiness)
+    ? getSeatCountInputError(draftBusiness, defaultBusiness)
     : null
   const enterpriseSeatError = isEditing
-    ? getSeatReductionError(draftEnterprise, defaultEnterprise)
+    ? getSeatCountInputError(draftEnterprise, defaultEnterprise)
     : null
   const hasSeatValidationError = Boolean(businessSeatError || enterpriseSeatError)
 
@@ -114,19 +108,11 @@ export function UsersView({ users, seatOverrides = {}, onSeatOverridesChange, on
   }
 
   const handleSave = () => {
-    if (hasSeatValidationError) return
+    if (hasSeatValidationError || parsedDraftBusiness === null || parsedDraftEnterprise === null) return
 
-    const parsedBusiness = Number(draftBusiness)
-    const parsedEnterprise = Number(draftEnterprise)
-    const normalizedBusiness = Number.isFinite(parsedBusiness)
-      ? Math.max(defaultBusiness, Math.floor(parsedBusiness))
-      : defaultBusiness
-    const normalizedEnterprise = Number.isFinite(parsedEnterprise)
-      ? Math.max(defaultEnterprise, Math.floor(parsedEnterprise))
-      : defaultEnterprise
     const newOverrides: SeatOverrides = {}
-    if (normalizedBusiness !== defaultBusiness) newOverrides.business = normalizedBusiness
-    if (normalizedEnterprise !== defaultEnterprise) newOverrides.enterprise = normalizedEnterprise
+    if (parsedDraftBusiness !== defaultBusiness) newOverrides.business = parsedDraftBusiness
+    if (parsedDraftEnterprise !== defaultEnterprise) newOverrides.enterprise = parsedDraftEnterprise
     onSeatOverridesChange?.(newOverrides)
     setIsEditing(false)
   }
@@ -240,6 +226,7 @@ export function UsersView({ users, seatOverrides = {}, onSeatOverridesChange, on
                         <input
                           className={businessSeatError ? seatInputErrorClass : seatInputDefaultClass}
                           type="number"
+                          inputMode="numeric"
                           min={defaultBusiness}
                           step="1"
                           value={draftBusiness}
@@ -265,6 +252,7 @@ export function UsersView({ users, seatOverrides = {}, onSeatOverridesChange, on
                         <input
                           className={enterpriseSeatError ? seatInputErrorClass : seatInputDefaultClass}
                           type="number"
+                          inputMode="numeric"
                           min={defaultEnterprise}
                           step="1"
                           value={draftEnterprise}

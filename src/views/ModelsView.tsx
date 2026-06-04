@@ -254,11 +254,11 @@ export function ModelsView({ modelUsage, isIndividualReport, rangeStart, rangeEn
         <div className="grid grid-cols-1 gap-6 w-full">
           <div className="flex flex-col gap-[10px]">
             <MultiSeriesStackedBarChart
-              title={`Daily average AIC per Request (${selectedModel})`}
+              title={`Daily average AICs per PRU (${selectedModel})`}
               labels={dailyAverageAicPerRequest.map((day) => day.date)}
               series={[
                 {
-                  label: 'Average daily AICs per request',
+                  label: 'Average daily AICs per PRU',
                   color: '#14b8a6',
                   data: dailyAverageAicPerRequest.map((day) => day.averageAicPerRequest),
                 },
@@ -266,17 +266,20 @@ export function ModelsView({ modelUsage, isIndividualReport, rangeStart, rangeEn
               height={320}
             />
             <p className="m-0 text-base font-normal text-center text-fg-default">
-              Average AICs per request for <strong>{selectedModel}</strong> in the current report period:{' '}
-              <strong>{formatAverageAicPerRequest(overallAverageAicPerRequest)}</strong>, average gross per request{' '}
+              Average AICs per PRU for <strong>{selectedModel}</strong> in the current report period:{' '}
+              <strong>{formatAverageAicPerRequest(overallAverageAicPerRequest)}</strong>, average gross per PRU{' '}
               <strong>{formatUsd(overallAverageAicGrossPerRequest)}</strong>
+            </p>
+            <p className="m-0 text-[13px] text-center text-fg-muted leading-normal">
+              Note: PRU quantities include billing-period model multipliers, so AICs per PRU should not be read as AICs per actual request when comparing models.
             </p>
           </div>
           <DualAxisLineChart
-            title={`Daily Requests & AI Credits (${selectedModel})`}
+            title={`Daily PRUs & AI Credits (${selectedModel})`}
             labels={filledPerModelDailyData.map((day) => day.date)}
             series={[
               {
-                label: 'Premium Requests',
+                label: 'PRUs',
                 color: '#6366f1',
                 data: filledPerModelDailyData.map((day) => day.requests),
                 yAxisID: 'y',
