@@ -1,9 +1,11 @@
 import type { Aggregator } from './base'
-import { getUsageMetrics, type TokenUsageHeader, type TokenUsageRecord } from '../parser'
+import type { TokenUsageHeader, TokenUsageRecord } from '../parser'
 import { getDisplayModelName } from '../modelLabels'
 import { getFriendlyProductName } from '../productClassification'
 import { classifyUserSpendSegments, type UserSpendSegmentId } from '../../utils/userSpendSegments'
 import { selectKnownMonthlyQuota } from '../aicIncludedCredits'
+import type { ReportFormat, ReportFormatMetadata } from '../reportAdapters'
+import { getAggregatorReportFormat, getAggregatorUsageMetrics } from './usageMetrics'
 
 export type UserModelDailyUsage = {
   requests: number
@@ -149,6 +151,11 @@ function ensureProductModel(product: { models: Map<string, UserProductUsage> }, 
 
 export class UserUsageAggregator implements Aggregator<TokenUsageRecord, UserUsageResult, TokenUsageHeader> {
   private byUser = new Map<string, UserUsageInternal>()
+  private readonly reportFormat: ReportFormat
+
+  constructor(reportMetadataOrFormat?: ReportFormat | ReportFormatMetadata) {
+    this.reportFormat = getAggregatorReportFormat(reportMetadataOrFormat)
+  }
 
   onHeader(): void {
     // header is intentionally ignored (we rely on parsed TokenUsageRecord fields)
@@ -199,7 +206,7 @@ export class UserUsageAggregator implements Aggregator<TokenUsageRecord, UserUsa
       user.costCenters.add(costCenter)
     }
 
-    const { requests, grossAmount, discountAmount, netAmount, aicQuantity, aicGrossAmount, aicNetAmount } = getUsageMetrics(record)
+    const { requests, grossAmount, discountAmount, netAmount, aicQuantity, aicGrossAmount, aicNetAmount } = getAggregatorUsageMetrics(record, this.reportFormat)
 
     user.distinctModels.add(model)
     user.totals.requests += requests

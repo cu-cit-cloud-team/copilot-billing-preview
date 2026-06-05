@@ -1,8 +1,10 @@
 import type { Aggregator } from './base'
-import { getUsageMetrics, type TokenUsageHeader, type TokenUsageRecord } from '../parser'
+import type { TokenUsageHeader, TokenUsageRecord } from '../parser'
 import { getDisplayModelName } from '../modelLabels'
 import { isNonCopilotCodeReviewUsage, NON_COPILOT_CODE_REVIEW_USER_LABEL } from '../productClassification'
 import { pickTopEntries } from './topBreakdown'
+import type { ReportFormat, ReportFormatMetadata } from '../reportAdapters'
+import { getAggregatorReportFormat, getAggregatorUsageMetrics } from './usageMetrics'
 
 export type OrgTotals = {
   requests: number
@@ -65,6 +67,11 @@ function ensureUserTotals(map: Map<string, OrgUserTotals>, key: string): OrgUser
 
 export class OrganizationAggregator implements Aggregator<TokenUsageRecord, OrganizationResult, TokenUsageHeader> {
   private byOrg = new Map<string, OrgInternal>()
+  private readonly reportFormat: ReportFormat
+
+  constructor(reportMetadataOrFormat?: ReportFormat | ReportFormatMetadata) {
+    this.reportFormat = getAggregatorReportFormat(reportMetadataOrFormat)
+  }
 
   onHeader(): void {
     // header is intentionally ignored (we rely on parsed TokenUsageRecord fields)
@@ -93,7 +100,7 @@ export class OrganizationAggregator implements Aggregator<TokenUsageRecord, Orga
 
     if (username) org.users.add(username)
 
-    const { requests, grossAmount, discountAmount, netAmount, aicQuantity, aicGrossAmount, aicNetAmount } = getUsageMetrics(record)
+    const { requests, grossAmount, discountAmount, netAmount, aicQuantity, aicGrossAmount, aicNetAmount } = getAggregatorUsageMetrics(record, this.reportFormat)
 
     org.totals.requests += requests
     org.totals.grossAmount += grossAmount

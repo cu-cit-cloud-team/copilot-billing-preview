@@ -1,5 +1,7 @@
 import type { Aggregator } from './base'
-import { getUsageMetrics, type TokenUsageRecord } from '../parser'
+import type { TokenUsageRecord } from '../parser'
+import type { ReportFormat, ReportFormatMetadata } from '../reportAdapters'
+import { getAggregatorReportFormat, getAggregatorUsageMetrics } from './usageMetrics'
 
 export interface DailyUsageData {
   date: string
@@ -18,6 +20,11 @@ export interface DailyUsageResult {
 
 export class DailyUsageAggregator implements Aggregator<TokenUsageRecord, DailyUsageResult> {
   private dataByDate = new Map<string, DailyUsageData>()
+  private readonly reportFormat: ReportFormat
+
+  constructor(reportMetadataOrFormat?: ReportFormat | ReportFormatMetadata) {
+    this.reportFormat = getAggregatorReportFormat(reportMetadataOrFormat)
+  }
 
   accumulate(record: TokenUsageRecord): void {
     const date = record.date ?? ''
@@ -25,7 +32,7 @@ export class DailyUsageAggregator implements Aggregator<TokenUsageRecord, DailyU
 
     const existing = this.dataByDate.get(date)
 
-    const { requests, aicQuantity, grossAmount, aicGrossAmount, aicNetAmount, discountAmount, netAmount } = getUsageMetrics(record)
+    const { requests, aicQuantity, grossAmount, aicGrossAmount, aicNetAmount, discountAmount, netAmount } = getAggregatorUsageMetrics(record, this.reportFormat)
 
     if (existing) {
       existing.requests += requests

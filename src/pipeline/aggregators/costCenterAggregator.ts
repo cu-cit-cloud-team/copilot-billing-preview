@@ -1,8 +1,10 @@
 import type { Aggregator } from './base'
-import { getUsageMetrics, type TokenUsageHeader, type TokenUsageRecord } from '../parser'
+import type { TokenUsageHeader, TokenUsageRecord } from '../parser'
 import { getDisplayModelName } from '../modelLabels'
 import { isNonCopilotCodeReviewUsage, NON_COPILOT_CODE_REVIEW_USER_LABEL } from '../productClassification'
 import { pickTopEntries } from './topBreakdown'
+import type { ReportFormat, ReportFormatMetadata } from '../reportAdapters'
+import { getAggregatorReportFormat, getAggregatorUsageMetrics } from './usageMetrics'
 
 export type CostTotals = {
   requests: number
@@ -74,6 +76,11 @@ function ensureUserTotals(map: Map<string, CostCenterUserTotals>, key: string): 
 
 export class CostCenterAggregator implements Aggregator<TokenUsageRecord, CostCenterResult, TokenUsageHeader> {
   private byCostCenter = new Map<string, CostCenterInternal>()
+  private readonly reportFormat: ReportFormat
+
+  constructor(reportMetadataOrFormat?: ReportFormat | ReportFormatMetadata) {
+    this.reportFormat = getAggregatorReportFormat(reportMetadataOrFormat)
+  }
 
   onHeader(): void {
     // header is intentionally ignored (we rely on parsed TokenUsageRecord fields)
@@ -102,7 +109,7 @@ export class CostCenterAggregator implements Aggregator<TokenUsageRecord, CostCe
 
     if (username) costCenter.users.add(username)
 
-    const { requests, grossAmount, discountAmount, netAmount, aicQuantity, aicGrossAmount, aicNetAmount } = getUsageMetrics(record)
+    const { requests, grossAmount, discountAmount, netAmount, aicQuantity, aicGrossAmount, aicNetAmount } = getAggregatorUsageMetrics(record, this.reportFormat)
 
     costCenter.totals.requests += requests
     costCenter.totals.grossAmount += grossAmount

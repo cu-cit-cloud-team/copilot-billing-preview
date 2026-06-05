@@ -1,7 +1,9 @@
 import type { Aggregator } from './base'
 import { getDisplayModelName } from '../modelLabels'
-import { getUsageMetrics, type TokenUsageHeader, type TokenUsageRecord } from '../parser'
+import type { TokenUsageHeader, TokenUsageRecord } from '../parser'
 import { getFriendlyProductName } from '../productClassification'
+import type { ReportFormat, ReportFormatMetadata } from '../reportAdapters'
+import { getAggregatorReportFormat, getAggregatorUsageMetrics } from './usageMetrics'
 
 export type ProductUsageTotals = {
   requests: number
@@ -35,6 +37,11 @@ function createTotals(): ProductUsageTotals {
 
 export class ProductUsageAggregator implements Aggregator<TokenUsageRecord, ProductUsageResult, TokenUsageHeader> {
   private readonly byProduct = new Map<string, { totals: ProductUsageTotals; models: Map<string, ProductUsageTotals> }>()
+  private readonly reportFormat: ReportFormat
+
+  constructor(reportMetadataOrFormat?: ReportFormat | ReportFormatMetadata) {
+    this.reportFormat = getAggregatorReportFormat(reportMetadataOrFormat)
+  }
 
   onHeader(): void {
     // header is intentionally ignored (we rely on parsed TokenUsageRecord fields)
@@ -53,7 +60,7 @@ export class ProductUsageAggregator implements Aggregator<TokenUsageRecord, Prod
       this.byProduct.set(product, productUsage)
     }
 
-    const { requests, aicQuantity, grossAmount, netAmount, aicGrossAmount, aicNetAmount } = getUsageMetrics(record)
+    const { requests, aicQuantity, grossAmount, netAmount, aicGrossAmount, aicNetAmount } = getAggregatorUsageMetrics(record, this.reportFormat)
     productUsage.totals.requests += requests
     productUsage.totals.aicQuantity += aicQuantity
     productUsage.totals.grossAmount += grossAmount
