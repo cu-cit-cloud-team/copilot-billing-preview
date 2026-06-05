@@ -3,7 +3,6 @@ import { createAicIncludedCreditsAllocator, type AicIncludedCreditsOverrides } f
 import {
   InvalidReportError,
   parseTokenUsageHeader,
-  parseNormalizedTokenUsageRecord,
   parseTokenUsageRecord,
   type TokenUsageHeader,
   type TokenUsageRecord,
@@ -16,7 +15,7 @@ import {
 } from './reportAdapters'
 import { streamLines, type StreamProgress } from './streamer'
 
-async function validateFileFormat(file: File): Promise<ReportFormatMetadata> {
+async function validateFileFormat(file: File): Promise<UsageReportAdapter> {
   let header: TokenUsageHeader | null = null
   let selectedAdapter: UsageReportAdapter | null = null
 
@@ -32,14 +31,14 @@ async function validateFileFormat(file: File): Promise<ReportFormatMetadata> {
       continue
     }
 
-    return validateUsageReportFirstRecord(header, parseTokenUsageRecord(trimmed, header)).metadata
+    return validateUsageReportFirstRecord(header, parseTokenUsageRecord(trimmed, header))
   }
 
   if (!selectedAdapter) {
     throw new InvalidReportError()
   }
 
-  return selectedAdapter.metadata
+  return selectedAdapter
 }
 
 export interface PipelineProgress {
@@ -91,7 +90,8 @@ export async function runPipeline(
   options?: PipelineOptions,
 ): Promise<PipelineResult> {
   const { includedCreditsOverrides = {}, progressResolution = 500, onProgress } = options ?? {}
-  const reportMetadata = await validateFileFormat(file)
+  const reportAdapter = await validateFileFormat(file)
+  const reportMetadata = reportAdapter.metadata
   let lastProgressStage: PipelineProgress['stage'] | null = null
   let lastProgressPercent = -1
   let lastProgressTimestamp = 0
@@ -165,7 +165,7 @@ export async function runPipeline(
       continue
     }
 
-    const normalizedRecord = parseNormalizedTokenUsageRecord(trimmed, header)
+    const normalizedRecord = reportAdapter.parseRecord(trimmed, header)
     reportRowCount += 1
     if (!normalizedRecord) continue
 
