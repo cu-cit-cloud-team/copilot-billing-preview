@@ -693,7 +693,7 @@ describe('validateHeader', () => {
   })
 
   it('throws UnsupportedReportVersionError when only aic columns are missing', () => {
-    const legacyHeader = [
+    const preAicHeader = [
       'date',
       'username',
       'product',
@@ -710,12 +710,12 @@ describe('validateHeader', () => {
       'organization',
       'cost_center_name',
     ].join(',')
-    const header = parseTokenUsageHeader(legacyHeader)
+    const header = parseTokenUsageHeader(preAicHeader)
     expect(() => validateHeader(header)).toThrow(UnsupportedReportVersionError)
   })
 
   it('throws UnsupportedReportVersionError when only one aic column is missing', () => {
-    const legacyHeader = [
+    const preAicHeader = [
       'date',
       'username',
       'product',
@@ -733,7 +733,7 @@ describe('validateHeader', () => {
       'cost_center_name',
       'aic_quantity',
     ].join(',')
-    const header = parseTokenUsageHeader(legacyHeader)
+    const header = parseTokenUsageHeader(preAicHeader)
     expect(() => validateHeader(header)).toThrow(UnsupportedReportVersionError)
   })
 

@@ -4,11 +4,10 @@ import {
   parseTokenUsageHeader,
   parseNormalizedTokenUsageRecord,
   parseTokenUsageRecord,
-  validateSupportedReportRecord,
-  validateHeader,
   type TokenUsageHeader,
   type TokenUsageRecord,
 } from './parser'
+import { validateUsageReportFirstRecord, validateUsageReportHeader } from './reportAdapters'
 import { streamLines, type StreamProgress } from './streamer'
 
 async function validateFileFormat(file: File): Promise<void> {
@@ -22,11 +21,11 @@ async function validateFileFormat(file: File): Promise<void> {
 
     if (!header) {
       header = parseTokenUsageHeader(trimmed)
-      validateHeader(header)
+      validateUsageReportHeader(header)
       continue
     }
 
-    validateSupportedReportRecord(header, parseTokenUsageRecord(trimmed, header))
+    validateUsageReportFirstRecord(header, parseTokenUsageRecord(trimmed, header))
     return
   }
 }
