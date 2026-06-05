@@ -147,7 +147,7 @@ export function isKnownMonthlyQuota(totalMonthlyQuota: number): boolean {
 
 function isKnownMonthlyQuotaForPolicy(totalMonthlyQuota: number, policy: IncludedCreditsPolicy): boolean {
   if (!Number.isFinite(totalMonthlyQuota)) return false
-  if (policy === TRANSITION_PERIOD_INCLUDED_CREDITS_POLICY) {
+  if (policy.id === TRANSITION_PERIOD_INCLUDED_CREDITS_POLICY.id) {
     return TRANSITION_PERIOD_KNOWN_MONTHLY_QUOTAS.has(totalMonthlyQuota)
   }
 
@@ -182,8 +182,16 @@ export function getPlanLabel(
   const individualPlan = findIndividualIncludedCreditsPlan(totalMonthlyQuota, reportPlanScope)
   if (individualPlan) return individualPlan.label
 
-  if (totalMonthlyQuota > 0) return `Unknown (${totalMonthlyQuota.toLocaleString()} PRUs/month)`
+  if (totalMonthlyQuota > 0) {
+    return `Unknown (${totalMonthlyQuota.toLocaleString()} ${getUnknownQuotaLabel(reportPlanScope, policy)})`
+  }
   return 'Unknown'
+}
+
+function getUnknownQuotaLabel(reportPlanScope: ReportPlanScope, policy: IncludedCreditsPolicy): string {
+  if (reportPlanScope === 'individual') return 'PRUs/month'
+
+  return policy.organizationPlans.business.identity.quotaUnit === 'aic' ? 'AI Credits/month' : 'PRUs/month'
 }
 
 export function getAicIncludedCreditTier(

@@ -176,6 +176,22 @@ describe('AIC included credit tiering and pool sizing', () => {
     )
     expect(getAicIncludedCreditTier(1900)).toBeNull()
     expect(getMonthlyAicIncludedCredits(3900)).toBe(0)
+    expect(getAicIncludedCreditTier(
+      1900,
+      'organization',
+      NATIVE_AI_CREDITS_SUMMER_PROMO_INCLUDED_CREDITS_POLICY,
+    )).toBe('business')
+    expect(getMonthlyAicIncludedCredits(
+      3900,
+      'organization',
+      NATIVE_AI_CREDITS_STANDARD_INCLUDED_CREDITS_POLICY,
+    )).toBe(3900)
+    expect(getPlanLabel(1900, 'organization', NATIVE_AI_CREDITS_SUMMER_PROMO_INCLUDED_CREDITS_POLICY)).toBe(
+      'Copilot Business',
+    )
+    expect(getPlanLabel(1234, 'organization', NATIVE_AI_CREDITS_SUMMER_PROMO_INCLUDED_CREDITS_POLICY)).toBe(
+      'Unknown (1,234 AI Credits/month)',
+    )
   })
 
   it('classifies 300 as Pro/Student for an individual report', () => {
