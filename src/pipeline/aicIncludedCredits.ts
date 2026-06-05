@@ -5,23 +5,63 @@ import {
   type TokenUsageHeader,
   type TokenUsageRecord,
 } from './parser'
+import {
+  TRANSITION_PERIOD_INCLUDED_CREDITS_POLICY,
+  type IncludedCreditsPolicy,
+  type OrganizationIncludedCreditTier,
+  type PlanIdentity,
+} from './includedCreditsPolicy'
 import { streamLines, type StreamProgress } from './streamer'
 
-export const BUSINESS_MONTHLY_QUOTA = 300
-export const ENTERPRISE_MONTHLY_QUOTA = 1000
-export const PRO_MONTHLY_QUOTA = 300
-export const PRO_PLUS_MONTHLY_QUOTA = 1500
-const KNOWN_MONTHLY_QUOTAS = new Set([
-  BUSINESS_MONTHLY_QUOTA,
-  ENTERPRISE_MONTHLY_QUOTA,
+type IndividualPlan = 'pro-student' | 'pro-plus'
+
+type IndividualIncludedCreditsPlans = {
+  readonly [Tier in IndividualPlan]: {
+    readonly identity: PlanIdentity<Tier>
+    readonly label: string
+    readonly monthlyIncludedCredits: number
+  }
+}
+
+const INDIVIDUAL_INCLUDED_CREDIT_PLANS = {
+  'pro-student': {
+    identity: {
+      tier: 'pro-student',
+      quotaUnit: 'pru',
+      monthlyQuota: 300,
+    },
+    label: 'Copilot Pro/Student',
+    monthlyIncludedCredits: 1500,
+  },
+  'pro-plus': {
+    identity: {
+      tier: 'pro-plus',
+      quotaUnit: 'pru',
+      monthlyQuota: 1500,
+    },
+    label: 'Copilot Pro+',
+    monthlyIncludedCredits: 7000,
+  },
+} as const satisfies IndividualIncludedCreditsPlans
+
+export const BUSINESS_MONTHLY_QUOTA = TRANSITION_PERIOD_INCLUDED_CREDITS_POLICY.organizationPlans.business.identity.monthlyQuota
+export const ENTERPRISE_MONTHLY_QUOTA = TRANSITION_PERIOD_INCLUDED_CREDITS_POLICY.organizationPlans.enterprise.identity.monthlyQuota
+export const PRO_MONTHLY_QUOTA = INDIVIDUAL_INCLUDED_CREDIT_PLANS['pro-student'].identity.monthlyQuota
+export const PRO_PLUS_MONTHLY_QUOTA = INDIVIDUAL_INCLUDED_CREDIT_PLANS['pro-plus'].identity.monthlyQuota
+const INDIVIDUAL_KNOWN_MONTHLY_QUOTAS = new Set<number>([
   PRO_MONTHLY_QUOTA,
   PRO_PLUS_MONTHLY_QUOTA,
 ])
+const TRANSITION_PERIOD_KNOWN_MONTHLY_QUOTAS = new Set<number>([
+  BUSINESS_MONTHLY_QUOTA,
+  ENTERPRISE_MONTHLY_QUOTA,
+  ...INDIVIDUAL_KNOWN_MONTHLY_QUOTAS,
+])
 
-export const BUSINESS_MONTHLY_AIC_INCLUDED_CREDITS = 3000
-export const ENTERPRISE_MONTHLY_AIC_INCLUDED_CREDITS = 7000
-export const PRO_MONTHLY_AIC_INCLUDED_CREDITS = 1500
-export const PRO_PLUS_MONTHLY_AIC_INCLUDED_CREDITS = 7000
+export const BUSINESS_MONTHLY_AIC_INCLUDED_CREDITS = TRANSITION_PERIOD_INCLUDED_CREDITS_POLICY.organizationPlans.business.monthlyIncludedCredits
+export const ENTERPRISE_MONTHLY_AIC_INCLUDED_CREDITS = TRANSITION_PERIOD_INCLUDED_CREDITS_POLICY.organizationPlans.enterprise.monthlyIncludedCredits
+export const PRO_MONTHLY_AIC_INCLUDED_CREDITS = INDIVIDUAL_INCLUDED_CREDIT_PLANS['pro-student'].monthlyIncludedCredits
+export const PRO_PLUS_MONTHLY_AIC_INCLUDED_CREDITS = INDIVIDUAL_INCLUDED_CREDIT_PLANS['pro-plus'].monthlyIncludedCredits
 
 export type AicIncludedCreditsOverrides = {
   business?: number
@@ -29,8 +69,8 @@ export type AicIncludedCreditsOverrides = {
 }
 
 export type ReportPlanScope = 'individual' | 'organization'
-export type AicIncludedCreditTier = 'business' | 'enterprise' | null
-export type IndividualPlanTier = 'pro-student' | 'pro-plus' | null
+export type AicIncludedCreditTier = OrganizationIncludedCreditTier | null
+export type IndividualPlanTier = IndividualPlan | null
 
 export type LicenseSummaryRow = {
   label: string
@@ -46,6 +86,7 @@ export type LicenseSummary = {
 
 export interface AicIncludedCreditsProgressOptions {
   onProgress?: (progress: StreamProgress) => void
+  includedCreditsPolicy?: IncludedCreditsPolicy
 }
 
 type ReportScopeUser = {
@@ -64,25 +105,65 @@ function normalizeSeatCount(value: number | undefined): number | null {
   return Math.max(0, Math.floor(value))
 }
 
-function calculateOrganizationIncludedCreditsPool(overrides: AicIncludedCreditsOverrides): number | null {
+function calculateOrganizationIncludedCreditsPool(
+  overrides: AicIncludedCreditsOverrides,
+  policy: IncludedCreditsPolicy,
+): number | null {
   const businessSeats = normalizeSeatCount(overrides.business)
   const enterpriseSeats = normalizeSeatCount(overrides.enterprise)
 
   if (businessSeats === null && enterpriseSeats === null) return null
 
   return (
-    (businessSeats ?? 0) * BUSINESS_MONTHLY_AIC_INCLUDED_CREDITS
-    + (enterpriseSeats ?? 0) * ENTERPRISE_MONTHLY_AIC_INCLUDED_CREDITS
+    (businessSeats ?? 0) * policy.organizationPlans.business.monthlyIncludedCredits
+    + (enterpriseSeats ?? 0) * policy.organizationPlans.enterprise.monthlyIncludedCredits
   )
 }
 
-export function isKnownMonthlyQuota(totalMonthlyQuota: number): boolean {
-  return Number.isFinite(totalMonthlyQuota) && KNOWN_MONTHLY_QUOTAS.has(totalMonthlyQuota)
+function findOrganizationIncludedCreditsPlan(
+  totalMonthlyQuota: number,
+  reportPlanScope: ReportPlanScope,
+  policy: IncludedCreditsPolicy,
+) {
+  if (reportPlanScope !== 'organization') return null
+
+  return Object.values(policy.organizationPlans)
+    .find((plan) => plan.identity.monthlyQuota === totalMonthlyQuota) ?? null
 }
 
-export function selectKnownMonthlyQuota(currentQuota: number, candidateQuota: number): number {
-  const currentKnownQuota = isKnownMonthlyQuota(currentQuota) ? currentQuota : 0
-  if (!isKnownMonthlyQuota(candidateQuota)) return currentKnownQuota
+function findIndividualIncludedCreditsPlan(
+  totalMonthlyQuota: number,
+  reportPlanScope: ReportPlanScope,
+) {
+  if (reportPlanScope !== 'individual') return null
+
+  return Object.values(INDIVIDUAL_INCLUDED_CREDIT_PLANS)
+    .find((plan) => plan.identity.monthlyQuota === totalMonthlyQuota) ?? null
+}
+
+export function isKnownMonthlyQuota(totalMonthlyQuota: number): boolean {
+  return isKnownMonthlyQuotaForPolicy(totalMonthlyQuota, TRANSITION_PERIOD_INCLUDED_CREDITS_POLICY)
+}
+
+function isKnownMonthlyQuotaForPolicy(totalMonthlyQuota: number, policy: IncludedCreditsPolicy): boolean {
+  if (!Number.isFinite(totalMonthlyQuota)) return false
+  if (policy.id === TRANSITION_PERIOD_INCLUDED_CREDITS_POLICY.id) {
+    return TRANSITION_PERIOD_KNOWN_MONTHLY_QUOTAS.has(totalMonthlyQuota)
+  }
+
+  return (
+    INDIVIDUAL_KNOWN_MONTHLY_QUOTAS.has(totalMonthlyQuota)
+    || Object.values(policy.organizationPlans).some((plan) => plan.identity.monthlyQuota === totalMonthlyQuota)
+  )
+}
+
+export function selectKnownMonthlyQuota(
+  currentQuota: number,
+  candidateQuota: number,
+  policy: IncludedCreditsPolicy = TRANSITION_PERIOD_INCLUDED_CREDITS_POLICY,
+): number {
+  const currentKnownQuota = isKnownMonthlyQuotaForPolicy(currentQuota, policy) ? currentQuota : 0
+  if (!isKnownMonthlyQuotaForPolicy(candidateQuota, policy)) return currentKnownQuota
   return Math.max(currentKnownQuota, candidateQuota)
 }
 
@@ -90,61 +171,62 @@ export function inferReportPlanScope(userCount: number, hasOrganizationContext =
   return userCount === 1 && !hasOrganizationContext ? 'individual' : 'organization'
 }
 
-export function getPlanLabel(totalMonthlyQuota: number, reportPlanScope: ReportPlanScope = 'organization'): string {
-  const organizationTier = getAicIncludedCreditTier(totalMonthlyQuota, reportPlanScope)
-  if (organizationTier === 'business') return 'Copilot Business'
-  if (organizationTier === 'enterprise') return 'Copilot Enterprise'
+export function getPlanLabel(
+  totalMonthlyQuota: number,
+  reportPlanScope: ReportPlanScope = 'organization',
+  policy: IncludedCreditsPolicy = TRANSITION_PERIOD_INCLUDED_CREDITS_POLICY,
+): string {
+  const organizationPlan = findOrganizationIncludedCreditsPlan(totalMonthlyQuota, reportPlanScope, policy)
+  if (organizationPlan) return organizationPlan.label
 
-  const individualTier = getIndividualPlanTier(totalMonthlyQuota, reportPlanScope)
-  if (individualTier === 'pro-student') return 'Copilot Pro/Student'
-  if (individualTier === 'pro-plus') return 'Copilot Pro+'
+  const individualPlan = findIndividualIncludedCreditsPlan(totalMonthlyQuota, reportPlanScope)
+  if (individualPlan) return individualPlan.label
 
-  if (totalMonthlyQuota > 0) return `Unknown (${totalMonthlyQuota.toLocaleString()} PRUs/month)`
+  if (totalMonthlyQuota > 0) {
+    return `Unknown (${totalMonthlyQuota.toLocaleString()} ${getUnknownQuotaLabel(reportPlanScope, policy)})`
+  }
   return 'Unknown'
+}
+
+function getUnknownQuotaLabel(reportPlanScope: ReportPlanScope, policy: IncludedCreditsPolicy): string {
+  if (reportPlanScope === 'individual') return 'PRUs/month'
+
+  return policy.organizationPlans.business.identity.quotaUnit === 'aic' ? 'AI Credits/month' : 'PRUs/month'
 }
 
 export function getAicIncludedCreditTier(
   totalMonthlyQuota: number,
   reportPlanScope: ReportPlanScope = 'organization',
+  policy: IncludedCreditsPolicy = TRANSITION_PERIOD_INCLUDED_CREDITS_POLICY,
 ): AicIncludedCreditTier {
-  if (reportPlanScope !== 'organization') return null
-  if (totalMonthlyQuota === ENTERPRISE_MONTHLY_QUOTA) return 'enterprise'
-  if (totalMonthlyQuota === BUSINESS_MONTHLY_QUOTA) return 'business'
-  return null
+  return findOrganizationIncludedCreditsPlan(totalMonthlyQuota, reportPlanScope, policy)?.identity.tier ?? null
 }
 
 export function getIndividualPlanTier(
   totalMonthlyQuota: number,
   reportPlanScope: ReportPlanScope = 'individual',
 ): IndividualPlanTier {
-  if (reportPlanScope !== 'individual') return null
-  if (totalMonthlyQuota === PRO_PLUS_MONTHLY_QUOTA) return 'pro-plus'
-  if (totalMonthlyQuota === PRO_MONTHLY_QUOTA) return 'pro-student'
-  return null
+  return findIndividualIncludedCreditsPlan(totalMonthlyQuota, reportPlanScope)?.identity.tier ?? null
 }
 
 export function getMonthlyAicIncludedCredits(
   totalMonthlyQuota: number,
   reportPlanScope: ReportPlanScope = 'organization',
+  policy: IncludedCreditsPolicy = TRANSITION_PERIOD_INCLUDED_CREDITS_POLICY,
 ): number {
-  const tier = getAicIncludedCreditTier(totalMonthlyQuota, reportPlanScope)
-  if (tier === 'enterprise') return ENTERPRISE_MONTHLY_AIC_INCLUDED_CREDITS
-  if (tier === 'business') return BUSINESS_MONTHLY_AIC_INCLUDED_CREDITS
-  return 0
+  return findOrganizationIncludedCreditsPlan(totalMonthlyQuota, reportPlanScope, policy)?.monthlyIncludedCredits ?? 0
 }
 
 export function getIndividualMonthlyAicIncludedCredits(
   totalMonthlyQuota: number,
   reportPlanScope: ReportPlanScope = 'individual',
 ): number {
-  const tier = getIndividualPlanTier(totalMonthlyQuota, reportPlanScope)
-  if (tier === 'pro-plus') return PRO_PLUS_MONTHLY_AIC_INCLUDED_CREDITS
-  if (tier === 'pro-student') return PRO_MONTHLY_AIC_INCLUDED_CREDITS
-  return 0
+  return findIndividualIncludedCreditsPlan(totalMonthlyQuota, reportPlanScope)?.monthlyIncludedCredits ?? 0
 }
 
 export function calculateLicenseSummary(
   users: Array<{ totalMonthlyQuota: number } & ReportScopeUser>,
+  policy: IncludedCreditsPolicy = TRANSITION_PERIOD_INCLUDED_CREDITS_POLICY,
 ): LicenseSummary {
   const reportPlanScope = inferReportPlanScope(users.length, hasOrganizationContext(users))
   if (reportPlanScope === 'individual') {
@@ -161,22 +243,22 @@ export function calculateLicenseSummary(
   }
 
   const rows: LicenseSummaryRow[] = [
-    { label: 'Copilot Business', users: 0, includedAic: 0 },
-    { label: 'Copilot Enterprise', users: 0, includedAic: 0 },
+    { label: policy.organizationPlans.business.label, users: 0, includedAic: 0 },
+    { label: policy.organizationPlans.enterprise.label, users: 0, includedAic: 0 },
   ]
 
   users.forEach((user) => {
-    const tier = getAicIncludedCreditTier(user.totalMonthlyQuota, reportPlanScope)
-    const includedAic = getMonthlyAicIncludedCredits(user.totalMonthlyQuota, reportPlanScope)
+    const plan = findOrganizationIncludedCreditsPlan(user.totalMonthlyQuota, reportPlanScope, policy)
+    if (!plan) return
 
-    if (tier === 'business') {
+    if (plan.identity.tier === 'business') {
       rows[0].users += 1
-      rows[0].includedAic += includedAic
+      rows[0].includedAic += plan.monthlyIncludedCredits
     }
 
-    if (tier === 'enterprise') {
+    if (plan.identity.tier === 'enterprise') {
       rows[1].users += 1
-      rows[1].includedAic += includedAic
+      rows[1].includedAic += plan.monthlyIncludedCredits
     }
   })
 
@@ -192,6 +274,7 @@ export async function calculateAicIncludedCreditsContext(
   overrides: AicIncludedCreditsOverrides = {},
   options?: AicIncludedCreditsProgressOptions,
 ): Promise<AicIncludedCreditsContext> {
+  const includedCreditsPolicy = options?.includedCreditsPolicy ?? TRANSITION_PERIOD_INCLUDED_CREDITS_POLICY
   let header: TokenUsageHeader | null = null
   const quotasByUser = new Map<string, number>()
   let hasOrganizationContext = false
@@ -216,7 +299,11 @@ export async function calculateAicIncludedCreditsContext(
     }
 
     const currentQuota = quotasByUser.get(username) ?? 0
-    quotasByUser.set(username, selectKnownMonthlyQuota(currentQuota, record.total_monthly_quota))
+    quotasByUser.set(username, selectKnownMonthlyQuota(
+      currentQuota,
+      record.total_monthly_quota,
+      includedCreditsPolicy,
+    ))
   }
 
   const reportPlanScope = inferReportPlanScope(quotasByUser.size, hasOrganizationContext)
@@ -229,12 +316,12 @@ export async function calculateAicIncludedCreditsContext(
     }
   }
 
-  const overriddenOrganizationIncludedCreditPool = calculateOrganizationIncludedCreditsPool(overrides)
+  const overriddenOrganizationIncludedCreditPool = calculateOrganizationIncludedCreditsPool(overrides, includedCreditsPolicy)
 
   return {
     reportPlanScope,
     organizationIncludedCreditsPool: overriddenOrganizationIncludedCreditPool ?? Array.from(quotasByUser.values()).reduce(
-      (total, quota) => total + getMonthlyAicIncludedCredits(quota, reportPlanScope),
+      (total, quota) => total + getMonthlyAicIncludedCredits(quota, reportPlanScope, includedCreditsPolicy),
       0,
     ),
     individualMonthlyIncludedCredits: 0,
