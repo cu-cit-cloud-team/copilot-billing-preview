@@ -20,6 +20,11 @@ import {
   PRO_PLUS_MONTHLY_QUOTA,
   selectKnownMonthlyQuota,
 } from './aicIncludedCredits'
+import {
+  NATIVE_AI_CREDITS_STANDARD_INCLUDED_CREDITS_POLICY,
+  NATIVE_AI_CREDITS_SUMMER_PROMO_INCLUDED_CREDITS_POLICY,
+  TRANSITION_PERIOD_INCLUDED_CREDITS_POLICY,
+} from './includedCreditsPolicy'
 import { CostCenterAggregator } from './aggregators/costCenterAggregator'
 import { OrganizationAggregator } from './aggregators/organizationAggregator'
 import { UserUsageAggregator } from './aggregators/userUsageAggregator'
@@ -125,6 +130,52 @@ describe('AIC included credit tiering and pool sizing', () => {
   it('does not classify individual quotas as company included credit tiers', () => {
     expect(getAicIncludedCreditTier(BUSINESS_MONTHLY_QUOTA, 'individual')).toBeNull()
     expect(getAicIncludedCreditTier(ENTERPRISE_MONTHLY_QUOTA, 'individual')).toBeNull()
+  })
+
+  it('separates transition-period quota identity from included AI Credits entitlement', () => {
+    expect(TRANSITION_PERIOD_INCLUDED_CREDITS_POLICY.organizationPlans.business.identity).toEqual({
+      tier: 'business',
+      quotaUnit: 'pru',
+      monthlyQuota: BUSINESS_MONTHLY_QUOTA,
+    })
+    expect(TRANSITION_PERIOD_INCLUDED_CREDITS_POLICY.organizationPlans.business.monthlyIncludedCredits).toBe(
+      BUSINESS_MONTHLY_AIC_INCLUDED_CREDITS,
+    )
+    expect(TRANSITION_PERIOD_INCLUDED_CREDITS_POLICY.organizationPlans.enterprise.identity).toEqual({
+      tier: 'enterprise',
+      quotaUnit: 'pru',
+      monthlyQuota: ENTERPRISE_MONTHLY_QUOTA,
+    })
+    expect(TRANSITION_PERIOD_INCLUDED_CREDITS_POLICY.organizationPlans.enterprise.monthlyIncludedCredits).toBe(
+      ENTERPRISE_MONTHLY_AIC_INCLUDED_CREDITS,
+    )
+  })
+
+  it('keeps native AI Credits policies available without changing default transition-period tiering', () => {
+    expect(NATIVE_AI_CREDITS_SUMMER_PROMO_INCLUDED_CREDITS_POLICY.organizationPlans.business.identity).toEqual({
+      tier: 'business',
+      quotaUnit: 'aic',
+      monthlyQuota: 1900,
+    })
+    expect(NATIVE_AI_CREDITS_SUMMER_PROMO_INCLUDED_CREDITS_POLICY.organizationPlans.business.monthlyIncludedCredits).toBe(
+      3000,
+    )
+    expect(NATIVE_AI_CREDITS_SUMMER_PROMO_INCLUDED_CREDITS_POLICY.organizationPlans.enterprise.identity).toEqual({
+      tier: 'enterprise',
+      quotaUnit: 'aic',
+      monthlyQuota: 3900,
+    })
+    expect(NATIVE_AI_CREDITS_SUMMER_PROMO_INCLUDED_CREDITS_POLICY.organizationPlans.enterprise.monthlyIncludedCredits).toBe(
+      7000,
+    )
+    expect(NATIVE_AI_CREDITS_STANDARD_INCLUDED_CREDITS_POLICY.organizationPlans.business.monthlyIncludedCredits).toBe(
+      1900,
+    )
+    expect(NATIVE_AI_CREDITS_STANDARD_INCLUDED_CREDITS_POLICY.organizationPlans.enterprise.monthlyIncludedCredits).toBe(
+      3900,
+    )
+    expect(getAicIncludedCreditTier(1900)).toBeNull()
+    expect(getMonthlyAicIncludedCredits(3900)).toBe(0)
   })
 
   it('classifies 300 as Pro/Student for an individual report', () => {
