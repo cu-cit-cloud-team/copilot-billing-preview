@@ -326,18 +326,16 @@ export function normalizeNativeAiCreditsReportDate(rawDate: string): string {
 
 export function parseNativeAiCreditsUsageRecord(line: string, header: TokenUsageHeader): TokenUsageRecord {
   const record = parseTokenUsageRecord(line, header)
-  const aicQuantity = record.has_aic_quantity ? record.aic_quantity : record.quantity
-  const aicGrossAmount = record.has_aic_gross_amount ? record.aic_gross_amount : record.gross_amount
   const nativeRecord: TokenUsageRecord = {
     ...record,
     date: normalizeNativeAiCreditsReportDate(record.date),
-    aic_quantity: aicQuantity,
-    aic_gross_amount: aicGrossAmount,
+    aic_quantity: record.quantity,
+    aic_gross_amount: record.gross_amount,
+    aic_net_amount: record.net_amount,
     has_aic_quantity: true,
     has_aic_gross_amount: true,
   }
 
-  nativeRecord.aic_net_amount = getAicUsageMetrics(nativeRecord).aicGrossAmount
   return nativeRecord
 }
 

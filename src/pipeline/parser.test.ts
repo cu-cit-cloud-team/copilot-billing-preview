@@ -724,12 +724,13 @@ describe('native AI Credits parsing helpers', () => {
       cost_center_name: 'Cost Center A',
       aic_quantity: 96.9990345,
       aic_gross_amount: 0.969990345,
+      aic_net_amount: 0.819990345,
       has_aic_quantity: true,
       has_aic_gross_amount: true,
     })
   })
 
-  it('uses native quantity and gross amount as AIC alias fallbacks when alias columns are blank', () => {
+  it('uses native quantity and cost fields as AIC aliases when alias columns are blank', () => {
     const header = parseTokenUsageHeader(HEADER_WITHOUT_EXCEEDS_QUOTA)
     const record = parseNativeAiCreditsUsageRecord(
       buildRow([
@@ -761,6 +762,44 @@ describe('native AI Credits parsing helpers', () => {
       net_amount: 0.1,
       aic_quantity: 12.5,
       aic_gross_amount: 0.125,
+      aic_net_amount: 0.1,
+      has_aic_quantity: true,
+      has_aic_gross_amount: true,
+    })
+  })
+
+  it('keeps native quantity and cost fields authoritative when alias columns differ', () => {
+    const header = parseTokenUsageHeader(HEADER_WITHOUT_EXCEEDS_QUOTA)
+    const record = parseNativeAiCreditsUsageRecord(
+      buildRow([
+        '5/29/26',
+        'octocat',
+        'copilot',
+        'copilot_ai_credit',
+        'GPT-5.2',
+        '50',
+        'ai-credits',
+        '0.01',
+        '0.50',
+        '0.20',
+        '0.30',
+        '3900',
+        'example-org',
+        'Cost Center A',
+        '75',
+        '0.75',
+      ]),
+      header,
+    )
+
+    expect(record).toMatchObject({
+      quantity: 50,
+      gross_amount: 0.5,
+      discount_amount: 0.2,
+      net_amount: 0.3,
+      aic_quantity: 50,
+      aic_gross_amount: 0.5,
+      aic_net_amount: 0.3,
       has_aic_quantity: true,
       has_aic_gross_amount: true,
     })
