@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import type { Aggregator } from './aggregators/base'
-import type { TokenUsageHeader, TokenUsageRecord } from './parser'
+import { InvalidReportError, UnsupportedReportVersionError, type TokenUsageHeader, type TokenUsageRecord } from './parser'
 import { runPipeline } from './runPipeline'
 
 const HEADER = [
@@ -65,6 +65,47 @@ class CaptureAggregator implements Aggregator<TokenUsageRecord, TokenUsageRecord
 }
 
 describe('runPipeline', () => {
+  it('accepts a valid header-only report', async () => {
+    const aggregator = new CaptureAggregator()
+
+    await expect(runPipeline(createCsv([]), [aggregator])).resolves.toEqual({
+      reportRowCount: 0,
+      processedRowCount: 0,
+    })
+    expect(aggregator.result()).toEqual([])
+  })
+
+  it('rejects a malformed header-only report', async () => {
+    const aggregator = new CaptureAggregator()
+
+    await expect(runPipeline(createCsv([], 'foo,bar,baz'), [aggregator])).rejects.toThrow(InvalidReportError)
+    expect(aggregator.result()).toEqual([])
+  })
+
+  it('rejects a pre-AIC header-only report', async () => {
+    const header = [
+      'date',
+      'username',
+      'product',
+      'sku',
+      'model',
+      'quantity',
+      'unit_type',
+      'applied_cost_per_quantity',
+      'gross_amount',
+      'discount_amount',
+      'net_amount',
+      'exceeds_quota',
+      'total_monthly_quota',
+      'organization',
+      'cost_center_name',
+    ].join(',')
+    const aggregator = new CaptureAggregator()
+
+    await expect(runPipeline(createCsv([], header), [aggregator])).rejects.toThrow(UnsupportedReportVersionError)
+    expect(aggregator.result()).toEqual([])
+  })
+
   it('rejects native AI Credits reports before processing rows', async () => {
     const file = createCsv([
       [

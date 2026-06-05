@@ -161,11 +161,15 @@ export function validateHeader(header: TokenUsageHeader): void {
   }
 }
 
-export function validateSupportedReportRecord(header: TokenUsageHeader, record: TokenUsageRecord): void {
+export function hasNativeAiCreditsReportSignature(header: TokenUsageHeader, record: TokenUsageRecord): boolean {
   const lacksExceedsQuota = !('exceeds_quota' in header.index)
   const usesNativeAiCreditsUnit = record.unit_type === 'ai-credits' && record.sku.endsWith('_ai_credit')
 
-  if (lacksExceedsQuota && usesNativeAiCreditsUnit) {
+  return lacksExceedsQuota && usesNativeAiCreditsUnit
+}
+
+export function validateSupportedReportRecord(header: TokenUsageHeader, record: TokenUsageRecord): void {
+  if (hasNativeAiCreditsReportSignature(header, record)) {
     throw new UnsupportedNativeAiCreditsReportError()
   }
 }
