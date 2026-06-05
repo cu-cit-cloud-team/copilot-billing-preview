@@ -54,8 +54,14 @@ const REPORT_ADAPTERS: Record<ReportFormat, UsageReportAdapter> = {
   'native-ai-credits': NATIVE_AI_CREDITS_REPORT_ADAPTER,
 }
 
-export function validateUsageReportHeader(header: TokenUsageHeader): void {
-  validateTokenUsageHeader(header)
+export function getDefaultSupportedUsageReportAdapter(): UsageReportAdapter {
+  return TRANSITION_PERIOD_BILLING_PREVIEW_REPORT_ADAPTER
+}
+
+export function validateUsageReportHeader(header: TokenUsageHeader): UsageReportAdapter {
+  const adapter = getDefaultSupportedUsageReportAdapter()
+  adapter.validateHeader(header)
+  return adapter
 }
 
 export function detectReportFormat(header: TokenUsageHeader, firstRecord: TokenUsageRecord): ReportFormat {
