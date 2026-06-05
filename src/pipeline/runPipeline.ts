@@ -1,6 +1,7 @@
 import type { Aggregator } from './aggregators/base'
 import { createAicIncludedCreditsAllocator, type AicIncludedCreditsOverrides } from './aicIncludedCredits'
 import {
+  InvalidReportError,
   parseTokenUsageHeader,
   parseNormalizedTokenUsageRecord,
   parseTokenUsageRecord,
@@ -8,7 +9,6 @@ import {
   type TokenUsageRecord,
 } from './parser'
 import {
-  getDefaultSupportedUsageReportAdapter,
   validateUsageReportFirstRecord,
   validateUsageReportHeader,
   type ReportFormatMetadata,
@@ -35,7 +35,11 @@ async function validateFileFormat(file: File): Promise<ReportFormatMetadata> {
     return validateUsageReportFirstRecord(header, parseTokenUsageRecord(trimmed, header)).metadata
   }
 
-  return (selectedAdapter ?? getDefaultSupportedUsageReportAdapter()).metadata
+  if (!selectedAdapter) {
+    throw new InvalidReportError()
+  }
+
+  return selectedAdapter.metadata
 }
 
 export interface PipelineProgress {

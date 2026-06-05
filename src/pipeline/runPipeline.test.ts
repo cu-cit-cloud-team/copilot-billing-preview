@@ -71,6 +71,14 @@ class CaptureAggregator implements Aggregator<TokenUsageRecord, TokenUsageRecord
 }
 
 describe('runPipeline', () => {
+  it('rejects reports without a header row', async () => {
+    const aggregator = new CaptureAggregator()
+    const file = new File(['\n\n'], 'usage.csv', { type: 'text/csv' })
+
+    await expect(runPipeline(file, [aggregator])).rejects.toThrow(InvalidReportError)
+    expect(aggregator.result()).toEqual([])
+  })
+
   it('returns transition-period metadata for a valid header-only report', async () => {
     const aggregator = new CaptureAggregator()
 
