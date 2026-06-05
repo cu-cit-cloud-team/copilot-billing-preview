@@ -1,17 +1,24 @@
 import type { Aggregator } from './aggregators/base'
 import { createAicIncludedCreditsAllocator, type AicIncludedCreditsOverrides } from './aicIncludedCredits'
 import {
+  InvalidReportError,
   parseTokenUsageHeader,
   parseNormalizedTokenUsageRecord,
   parseTokenUsageRecord,
   type TokenUsageHeader,
   type TokenUsageRecord,
 } from './parser'
-import { validateUsageReportFirstRecord, validateUsageReportHeader } from './reportAdapters'
+import {
+  validateUsageReportFirstRecord,
+  validateUsageReportHeader,
+  type ReportFormatMetadata,
+  type UsageReportAdapter,
+} from './reportAdapters'
 import { streamLines, type StreamProgress } from './streamer'
 
-async function validateFileFormat(file: File): Promise<void> {
+async function validateFileFormat(file: File): Promise<ReportFormatMetadata> {
   let header: TokenUsageHeader | null = null
+  let selectedAdapter: UsageReportAdapter | null = null
 
   for await (const line of streamLines(file)) {
     const trimmed = line.trimEnd()
@@ -21,13 +28,18 @@ async function validateFileFormat(file: File): Promise<void> {
 
     if (!header) {
       header = parseTokenUsageHeader(trimmed)
-      validateUsageReportHeader(header)
+      selectedAdapter = validateUsageReportHeader(header)
       continue
     }
 
-    validateUsageReportFirstRecord(header, parseTokenUsageRecord(trimmed, header))
-    return
+    return validateUsageReportFirstRecord(header, parseTokenUsageRecord(trimmed, header)).metadata
   }
+
+  if (!selectedAdapter) {
+    throw new InvalidReportError()
+  }
+
+  return selectedAdapter.metadata
 }
 
 export interface PipelineProgress {
@@ -45,6 +57,7 @@ export interface PipelineOptions {
 }
 
 export interface PipelineResult {
+  reportMetadata: ReportFormatMetadata
   reportRowCount: number
   processedRowCount: number
 }
@@ -78,7 +91,7 @@ export async function runPipeline(
   options?: PipelineOptions,
 ): Promise<PipelineResult> {
   const { includedCreditsOverrides = {}, progressResolution = 500, onProgress } = options ?? {}
-  await validateFileFormat(file)
+  const reportMetadata = await validateFileFormat(file)
   let lastProgressStage: PipelineProgress['stage'] | null = null
   let lastProgressPercent = -1
   let lastProgressTimestamp = 0
@@ -179,6 +192,7 @@ export async function runPipeline(
   }
 
   return {
+    reportMetadata,
     reportRowCount,
     processedRowCount: rowIndex,
   }

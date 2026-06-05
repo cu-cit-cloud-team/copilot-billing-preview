@@ -43,6 +43,12 @@ const NATIVE_AI_CREDITS_HEADER = [
   'aic_gross_amount',
 ].join(',')
 
+const TRANSITION_PERIOD_REPORT_METADATA = {
+  format: 'transition-period-billing-preview',
+  label: 'Transition Period Billing Preview report',
+  supported: true,
+}
+
 function createCsv(rows: string[][], header = HEADER): File {
   const body = [header, ...rows.map((row) => row.join(','))].join('\n')
   return new File([body], 'usage.csv', { type: 'text/csv' })
@@ -65,10 +71,19 @@ class CaptureAggregator implements Aggregator<TokenUsageRecord, TokenUsageRecord
 }
 
 describe('runPipeline', () => {
-  it('accepts a valid header-only report', async () => {
+  it('rejects reports without a header row', async () => {
+    const aggregator = new CaptureAggregator()
+    const file = new File(['\n\n'], 'usage.csv', { type: 'text/csv' })
+
+    await expect(runPipeline(file, [aggregator])).rejects.toThrow(InvalidReportError)
+    expect(aggregator.result()).toEqual([])
+  })
+
+  it('returns transition-period metadata for a valid header-only report', async () => {
     const aggregator = new CaptureAggregator()
 
     await expect(runPipeline(createCsv([]), [aggregator])).resolves.toEqual({
+      reportMetadata: TRANSITION_PERIOD_REPORT_METADATA,
       reportRowCount: 0,
       processedRowCount: 0,
     })
@@ -135,7 +150,7 @@ describe('runPipeline', () => {
     expect(aggregator.result()).toEqual([])
   })
 
-  it('filters and normalizes known normalization window rows before AIC allocation', async () => {
+  it('returns transition-period metadata while processing supported reports', async () => {
     const file = createCsv([
       ['2026-04-25', 'mona', 'copilot', 'copilot_premium_request', 'GPT-5', '0', 'requests', '0.04', '0', '0', '0', 'False', '300', '', '', '0', '0'],
       ['2026-04-25', 'mona', 'copilot', 'copilot_premium_request', 'GPT-5', '10', 'requests', '0.04', '0.40', '0', '0.40', 'False', '0', '', '', '100', '1.00'],
@@ -155,6 +170,7 @@ describe('runPipeline', () => {
       }),
     ])
     expect(result).toEqual({
+      reportMetadata: TRANSITION_PERIOD_REPORT_METADATA,
       reportRowCount: 2,
       processedRowCount: 1,
     })

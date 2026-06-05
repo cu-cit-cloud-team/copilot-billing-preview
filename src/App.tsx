@@ -34,6 +34,7 @@ import {
 } from './pipeline/aicIncludedCredits'
 import { PRODUCT_BUDGET_COPILOT, PRODUCT_BUDGET_COPILOT_CLOUD_AGENT, PRODUCT_BUDGET_SPARK } from './pipeline/productClassification'
 import { runPipeline } from './pipeline/runPipeline'
+import type { ReportFormatMetadata } from './pipeline/reportAdapters'
 import { runBudgetSimulation, type BudgetSimulationResult } from './utils/budgetSimulation'
 import { EMPTY_BUDGET_VALUES, getDefaultBudgetValues, getUserSpendSegmentsByUsername, type BudgetField, type BudgetValues } from './utils/costManagementBudgets'
 import { calculateIndividualPlanUpgradeRecommendation, getIndividualLicenseMonthlyCost } from './utils/individualPlanUpgrade'
@@ -49,6 +50,7 @@ const ENTERPRISE_LICENSE_MONTHLY_COST = 39
 function App() {
   const [status, setStatus] = useState<Status>('idle')
   const [quickStats, setQuickStats] = useState<QuickStatsResult | null>(null)
+  const [reportMetadata, setReportMetadata] = useState<ReportFormatMetadata | null>(null)
   const [reportContext, setReportContext] = useState<ReportContextResult | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [fileName, setFileName] = useState<string | null>(null)
@@ -79,6 +81,7 @@ function App() {
 
   const applyProcessedData = useCallback(({
     quickStats,
+    reportMetadata,
     reportContext,
     dailyUsageData,
     modelUsage,
@@ -88,6 +91,7 @@ function App() {
     userUsage,
   }: {
     quickStats: QuickStatsResult
+    reportMetadata: ReportFormatMetadata
     reportContext: ReportContextResult
     dailyUsageData: DailyUsageData[]
     modelUsage: ModelUsageResult
@@ -97,6 +101,7 @@ function App() {
     userUsage: UserUsageResult
   }) => {
     setQuickStats(quickStats)
+    setReportMetadata(reportMetadata)
     setReportContext(reportContext)
     setDailyUsageData(dailyUsageData)
     setModelUsage(modelUsage)
@@ -140,6 +145,7 @@ function App() {
         ...statsAggregator.result(),
         lineCount: pipelineResult.reportRowCount,
       },
+      reportMetadata: pipelineResult.reportMetadata,
       reportContext: contextAggregator.result(),
       dailyUsageData: dailyAggregator.result().dailyData,
       modelUsage: modelAggregator.result(),
@@ -168,6 +174,7 @@ function App() {
     setStatus(status)
     setError(null)
     setQuickStats(null)
+    setReportMetadata(null)
     setReportContext(null)
     setDailyUsageData([])
     setUserUsage(null)
@@ -476,7 +483,7 @@ function App() {
     }
   }
 
-  const hasReport = status === 'done' && fileName !== null
+  const hasReport = status === 'done' && fileName !== null && reportMetadata !== null
   const showSeatConfirmation = hasReport && seatConfirmationPending
   const rangeStart = reportContext?.startDate ?? null
   const rangeEnd = reportContext?.endDate ?? null
