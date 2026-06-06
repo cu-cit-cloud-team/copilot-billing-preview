@@ -1,6 +1,8 @@
 import {
   UnsupportedNativeAiCreditsReportError,
   hasNativeAiCreditsReportSignature,
+  parseNativeAiCreditsUsageRecord,
+  parseNormalizedTokenUsageRecord,
   validateHeader as validateTokenUsageHeader,
   validateSupportedReportRecord,
   type TokenUsageHeader,
@@ -19,6 +21,7 @@ export interface UsageReportAdapter {
   metadata: ReportFormatMetadata
   validateHeader(header: TokenUsageHeader): void
   validateFirstRecord(header: TokenUsageHeader, record: TokenUsageRecord): void
+  parseRecord(line: string, header: TokenUsageHeader): TokenUsageRecord | null
 }
 
 const TRANSITION_PERIOD_BILLING_PREVIEW_REPORT_ADAPTER: UsageReportAdapter = {
@@ -33,6 +36,9 @@ const TRANSITION_PERIOD_BILLING_PREVIEW_REPORT_ADAPTER: UsageReportAdapter = {
   validateFirstRecord(header, record) {
     validateSupportedReportRecord(header, record)
   },
+  parseRecord(line, header) {
+    return parseNormalizedTokenUsageRecord(line, header)
+  },
 }
 
 const NATIVE_AI_CREDITS_REPORT_ADAPTER: UsageReportAdapter = {
@@ -46,6 +52,9 @@ const NATIVE_AI_CREDITS_REPORT_ADAPTER: UsageReportAdapter = {
   },
   validateFirstRecord() {
     throw new UnsupportedNativeAiCreditsReportError()
+  },
+  parseRecord(line, header) {
+    return parseNativeAiCreditsUsageRecord(line, header)
   },
 }
 

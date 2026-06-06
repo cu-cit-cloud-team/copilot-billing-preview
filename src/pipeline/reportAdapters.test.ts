@@ -120,36 +120,135 @@ describe('usage report adapters', () => {
     expect(() => validateUsageReportFirstRecord(header, record)).not.toThrow()
   })
 
-  it('detects native AI Credits reports and routes them to an unsupported adapter', () => {
-    const header = parseTokenUsageHeader(HEADER_WITHOUT_EXCEEDS_QUOTA)
-    const record = parseTokenUsageRecord(
+  it('normalizes transition-period rows through the adapter parser', () => {
+    const header = parseTokenUsageHeader(TRANSITION_PERIOD_HEADER)
+    const adapter = validateUsageReportHeader(header)
+
+    expect(adapter.parseRecord(
       buildRow([
-        '2026-06-01',
+        '2026-04-25',
         'mona',
         'copilot',
-        'copilot_ai_credit',
-        'Auto: Claude Haiku 4.5',
-        '96.9990345',
-        'ai-credits',
-        '0.01',
-        '0.969990345',
+        'copilot_premium_request',
+        'GPT-5',
         '0',
-        '0.969990345',
-        '3900',
-        'example-org',
+        'requests',
+        '0.04',
+        '0',
+        '0',
+        '0',
+        'False',
+        '300',
         '',
-        '96.9990345',
-        '0.969990345',
+        '',
+        '0',
+        '0',
       ]),
+      header,
+    )).toBeNull()
+
+    expect(adapter.parseRecord(
+      buildRow([
+        '2026-04-25',
+        'mona',
+        'copilot',
+        'copilot_premium_request',
+        'GPT-5',
+        '10',
+        'requests',
+        '0.04',
+        '0.40',
+        '0',
+        '0.40',
+        'False',
+        '0',
+        '',
+        '',
+        '100',
+        '1.00',
+      ]),
+      header,
+    )).toMatchObject({
+      username: 'mona',
+      quantity: 0,
+      gross_amount: 0,
+      net_amount: 0,
+      aic_quantity: 50,
+      aic_gross_amount: 0.5,
+      aic_net_amount: 0.5,
+    })
+  })
+
+  it('detects native AI Credits reports and routes them to an unsupported adapter', () => {
+    const header = parseTokenUsageHeader(HEADER_WITHOUT_EXCEEDS_QUOTA)
+    const row = buildRow([
+      '2026-06-01',
+      'mona',
+      'copilot',
+      'copilot_ai_credit',
+      'Auto: Claude Haiku 4.5',
+      '96.9990345',
+      'ai-credits',
+      '0.01',
+      '0.969990345',
+      '0',
+      '0.969990345',
+      '3900',
+      'example-org',
+      '',
+      '96.9990345',
+      '0.969990345',
+    ])
+    const record = parseTokenUsageRecord(
+      row,
       header,
     )
 
+    const adapter = selectUsageReportAdapter(header, record)
+
     expect(detectReportFormat(header, record)).toBe('native-ai-credits')
-    expect(selectUsageReportAdapter(header, record).metadata).toMatchObject({
+    expect(adapter.metadata).toMatchObject({
       format: 'native-ai-credits',
       supported: false,
     })
+    expect(() => adapter.validateFirstRecord(header, record)).toThrow(UnsupportedNativeAiCreditsReportError)
     expect(() => validateUsageReportFirstRecord(header, record)).toThrow(UnsupportedNativeAiCreditsReportError)
+    expect(adapter.parseRecord(row, header)).toMatchObject({
+      date: '2026-06-01',
+      quantity: 96.9990345,
+      unit_type: 'ai-credits',
+      aic_quantity: 96.9990345,
+      aic_gross_amount: 0.969990345,
+      aic_net_amount: 0.969990345,
+      has_aic_quantity: true,
+      has_aic_gross_amount: true,
+    })
+  })
+
+  it('normalizes native AI Credits dates through the unsupported adapter parser hook', () => {
+    const header = parseTokenUsageHeader(HEADER_WITHOUT_EXCEEDS_QUOTA)
+    const row = buildRow([
+      '2026-06-01',
+      'mona',
+      'copilot',
+      'copilot_ai_credit',
+      'Auto: Claude Haiku 4.5',
+      '96.9990345',
+      'ai-credits',
+      '0.01',
+      '0.969990345',
+      '0',
+      '0.969990345',
+      '3900',
+      'example-org',
+      '',
+      '96.9990345',
+      '0.969990345',
+    ])
+    const record = parseTokenUsageRecord(row, header)
+    const adapter = selectUsageReportAdapter(header, record)
+
+    expect(adapter.parseRecord(row.replace('2026-06-01', '6/1/26'), header)?.date).toBe('2026-06-01')
   })
 
   it('fails clearly for malformed billing headers before adapter selection', () => {
