@@ -1,3 +1,6 @@
+import type { ReportFormat, ReportFormatMetadata } from './reportAdapters'
+import { isValidIsoDate } from './isoDate'
+
 export type QuotaUnit = 'pru' | 'aic'
 export type OrganizationIncludedCreditTier = 'business' | 'enterprise'
 
@@ -27,8 +30,14 @@ export type IncludedCreditsPolicy = {
   readonly organizationPlans: OrganizationIncludedCreditPlans
 }
 
+export type ReportPeriod = {
+  readonly startDate?: string | null
+  readonly endDate?: string | null
+}
+
 const COPILOT_BUSINESS_LABEL = 'Copilot Business'
 const COPILOT_ENTERPRISE_LABEL = 'Copilot Enterprise'
+const NATIVE_AI_CREDITS_STANDARD_POLICY_START_DATE = '2026-09-01'
 
 export const TRANSITION_PERIOD_INCLUDED_CREDITS_POLICY = {
   id: 'transition-period-billing-preview',
@@ -101,3 +110,30 @@ export const NATIVE_AI_CREDITS_STANDARD_INCLUDED_CREDITS_POLICY = {
     },
   },
 } as const satisfies IncludedCreditsPolicy
+
+function getReportFormat(reportMetadataOrFormat: ReportFormat | ReportFormatMetadata): ReportFormat {
+  return typeof reportMetadataOrFormat === 'string'
+    ? reportMetadataOrFormat
+    : reportMetadataOrFormat.format
+}
+
+function isBeforeIsoDate(value: string | null | undefined, boundary: string): boolean {
+  if (!value || !isValidIsoDate(value)) return false
+
+  return value < boundary
+}
+
+export function resolveIncludedCreditsPolicy(
+  reportMetadataOrFormat: ReportFormat | ReportFormatMetadata,
+  reportPeriod: ReportPeriod = {},
+): IncludedCreditsPolicy {
+  if (getReportFormat(reportMetadataOrFormat) === 'transition-period-billing-preview') {
+    return TRANSITION_PERIOD_INCLUDED_CREDITS_POLICY
+  }
+
+  if (isBeforeIsoDate(reportPeriod.startDate, NATIVE_AI_CREDITS_STANDARD_POLICY_START_DATE)) {
+    return NATIVE_AI_CREDITS_SUMMER_PROMO_INCLUDED_CREDITS_POLICY
+  }
+
+  return NATIVE_AI_CREDITS_STANDARD_INCLUDED_CREDITS_POLICY
+}

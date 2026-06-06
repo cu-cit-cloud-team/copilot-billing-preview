@@ -138,6 +138,7 @@ export async function runPipeline(
   }
 
   const aicIncludedCreditAllocator = await createAicIncludedCreditsAllocator(file, includedCreditsOverrides, {
+    reportMetadata,
     onProgress: (streamProgress) => {
       emitProgress('analyzing', 0, streamProgress)
     },

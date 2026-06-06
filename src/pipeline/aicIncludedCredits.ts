@@ -7,11 +7,15 @@ import {
 } from './parser'
 import {
   TRANSITION_PERIOD_INCLUDED_CREDITS_POLICY,
+  resolveIncludedCreditsPolicy,
   type IncludedCreditsPolicy,
   type OrganizationIncludedCreditTier,
   type PlanIdentity,
+  type ReportPeriod,
 } from './includedCreditsPolicy'
+import { isValidIsoDate } from './isoDate'
 import { streamLines, type StreamProgress } from './streamer'
+import type { ReportFormatMetadata } from './reportAdapters'
 
 type IndividualPlan = 'pro-student' | 'pro-plus'
 
@@ -87,6 +91,7 @@ export type LicenseSummary = {
 export interface AicIncludedCreditsProgressOptions {
   onProgress?: (progress: StreamProgress) => void
   includedCreditsPolicy?: IncludedCreditsPolicy
+  reportMetadata?: ReportFormatMetadata
 }
 
 type ReportScopeUser = {
@@ -224,6 +229,31 @@ export function getIndividualMonthlyAicIncludedCredits(
   return findIndividualIncludedCreditsPlan(totalMonthlyQuota, reportPlanScope)?.monthlyIncludedCredits ?? 0
 }
 
+function includeDateInReportPeriod(reportPeriod: ReportPeriod, rawDate: string): ReportPeriod {
+  const date = rawDate.trim()
+  if (!isValidIsoDate(date)) return reportPeriod
+
+  return {
+    startDate: !reportPeriod.startDate || date < reportPeriod.startDate ? date : reportPeriod.startDate,
+    endDate: !reportPeriod.endDate || date > reportPeriod.endDate ? date : reportPeriod.endDate,
+  }
+}
+
+function resolvePolicyForContext(
+  options: AicIncludedCreditsProgressOptions | undefined,
+  reportPeriod: ReportPeriod,
+): IncludedCreditsPolicy {
+  if (options?.includedCreditsPolicy) {
+    return options.includedCreditsPolicy
+  }
+
+  if (options?.reportMetadata) {
+    return resolveIncludedCreditsPolicy(options.reportMetadata, reportPeriod)
+  }
+
+  return TRANSITION_PERIOD_INCLUDED_CREDITS_POLICY
+}
+
 export function calculateLicenseSummary(
   users: Array<{ totalMonthlyQuota: number } & ReportScopeUser>,
   policy: IncludedCreditsPolicy = TRANSITION_PERIOD_INCLUDED_CREDITS_POLICY,
@@ -274,10 +304,10 @@ export async function calculateAicIncludedCreditsContext(
   overrides: AicIncludedCreditsOverrides = {},
   options?: AicIncludedCreditsProgressOptions,
 ): Promise<AicIncludedCreditsContext> {
-  const includedCreditsPolicy = options?.includedCreditsPolicy ?? TRANSITION_PERIOD_INCLUDED_CREDITS_POLICY
   let header: TokenUsageHeader | null = null
-  const quotasByUser = new Map<string, number>()
+  const quotaCandidatesByUser = new Map<string, Set<number>>()
   let hasOrganizationContext = false
+  let reportPeriod: ReportPeriod = {}
 
   for await (const line of streamLines(file, options)) {
     const trimmed = line.trimEnd()
@@ -291,6 +321,8 @@ export async function calculateAicIncludedCreditsContext(
     const record = parseNormalizedTokenUsageRecord(trimmed, header)
     if (!record) continue
 
+    reportPeriod = includeDateInReportPeriod(reportPeriod, record.date)
+
     const username = record.username.trim()
     if (!username) continue
 
@@ -298,15 +330,21 @@ export async function calculateAicIncludedCreditsContext(
       hasOrganizationContext = true
     }
 
-    const currentQuota = quotasByUser.get(username) ?? 0
-    quotasByUser.set(username, selectKnownMonthlyQuota(
-      currentQuota,
-      record.total_monthly_quota,
-      includedCreditsPolicy,
-    ))
+    const quotaCandidates = quotaCandidatesByUser.get(username) ?? new Set<number>()
+    quotaCandidates.add(record.total_monthly_quota)
+    quotaCandidatesByUser.set(username, quotaCandidates)
   }
 
-  const reportPlanScope = inferReportPlanScope(quotasByUser.size, hasOrganizationContext)
+  const includedCreditsPolicy = resolvePolicyForContext(options, reportPeriod)
+  const quotasByUser = new Map<string, number>()
+  quotaCandidatesByUser.forEach((quotaCandidates, username) => {
+    quotasByUser.set(username, Array.from(quotaCandidates).reduce(
+      (currentQuota, candidateQuota) => selectKnownMonthlyQuota(currentQuota, candidateQuota, includedCreditsPolicy),
+      0,
+    ))
+  })
+
+  const reportPlanScope = inferReportPlanScope(quotaCandidatesByUser.size, hasOrganizationContext)
   if (reportPlanScope === 'individual') {
     const quota = quotasByUser.values().next().value ?? 0
     return {
