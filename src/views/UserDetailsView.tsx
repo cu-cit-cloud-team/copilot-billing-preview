@@ -6,8 +6,10 @@ import { calculateAicDiscountAmount, calculateSavingsDifference } from '../utils
 import { fillDataForRange } from '../utils/fillDataForRange'
 import { formatAic } from '../utils/format'
 import { getUserSpendSegmentLabel } from '../utils/userSpendSegments'
-import { BillingProjectionDisclaimer, ExistingDiscountDisclaimer, PromotionalDataDisclaimer } from '../components/ui'
+import { BillingProjectionDisclaimer, BillingTotalsCards } from '../components/ui'
 import { th, thNum, td, tdNum } from '../components/ui/tableStyles'
+import { TRANSITION_PERIOD_INCLUDED_CREDITS_POLICY, type IncludedCreditsPolicy } from '../pipeline/includedCreditsPolicy'
+import { isNativeAiCreditsMode, type ReportMode } from '../utils/reportMode'
 
 type DailySummaryModelRow = {
   model: string
@@ -64,6 +66,9 @@ export interface UserDetailsViewProps {
   rangeStart?: string | null
   rangeEnd?: string | null
   onBackToUsers?: () => void
+  reportMode?: ReportMode
+  includedCreditsPolicy?: IncludedCreditsPolicy
+  showOrganizationPromotionalDataDisclaimer?: boolean
 }
 
 export function UserDetailsView({
@@ -73,7 +78,11 @@ export function UserDetailsView({
   rangeStart,
   rangeEnd,
   onBackToUsers,
+  reportMode = 'transition-period-billing-preview',
+  includedCreditsPolicy = TRANSITION_PERIOD_INCLUDED_CREDITS_POLICY,
+  showOrganizationPromotionalDataDisclaimer = true,
 }: UserDetailsViewProps) {
+  const isNativeAiCredits = isNativeAiCreditsMode(reportMode)
   const activeDailyEntries = useMemo(() => {
     if (!user) return []
     return Object.values(user.daily).sort((a, b) => a.date.localeCompare(b.date))
@@ -178,8 +187,8 @@ export function UserDetailsView({
 
   const aicDiscountAmount = user ? calculateAicDiscountAmount(user.totals.aicGrossAmount, user.totals.aicNetAmount) : 0
   const savings = user ? calculateSavingsDifference(user.totals.netAmount, user.totals.aicNetAmount) : 0
-  const planLabel = user ? getPlanLabel(user.totalMonthlyQuota, reportPlanScope) : null
-  const showExistingDiscountDisclaimer = reportPlanScope !== 'individual'
+  const planLabel = user ? getPlanLabel(user.totalMonthlyQuota, reportPlanScope, includedCreditsPolicy) : null
+  const showExistingDiscountDisclaimer = !isNativeAiCredits && reportPlanScope !== 'individual'
   const spendSegmentLabel = user && showExistingDiscountDisclaimer ? getUserSpendSegmentLabel(user.spendSegment) : null
 
   if (!user) {
@@ -232,7 +241,7 @@ export function UserDetailsView({
         <div className="bg-bg-default border border-border-default rounded-md p-4 text-fg-muted">No usage data for this user.</div>
       ) : (
         <>
-          {periodLabel && (
+          {!isNativeAiCredits && periodLabel && (
             <p className="text-base font-normal text-center mb-1 text-fg-default">
               {savings > 0 ? (
                 <>
@@ -252,58 +261,30 @@ export function UserDetailsView({
             </p>
           )}
 
-          <div className="grid grid-cols-2 max-sm:grid-cols-1 gap-4 mb-3">
-            <div className="bg-bg-default border border-border-default rounded-md px-5 py-7 text-center">
-              <div className="text-[13px] font-medium text-fg-muted uppercase tracking-wider mb-3">Current billing (PRUs)</div>
-              <div className="text-4xl font-bold leading-[1.2] text-fg-default">{formatCost(user.totals.netAmount)}</div>
-              <div className="text-sm text-fg-default mt-1.5">{user.totals.requests.toLocaleString()} PRUs</div>
-              <div className="text-xs text-fg-muted mt-1">1 PRU = $0.04</div>
-              <div className="mt-4 pt-3 border-t border-border-default w-full flex flex-col gap-1.5 text-left">
-                <div className="flex justify-between items-center text-[13px] text-fg-default tabular-nums">
-                  <span>Consumed PRUs</span>
-                  <span>{formatCost(user.totals.grossAmount)}</span>
-                </div>
-                <div className="flex justify-between items-center text-[13px] text-fg-muted tabular-nums">
-                  <span>Included PRUs</span>
-                  <span>−{formatCost(user.totals.discountAmount)}</span>
-                </div>
-                <div className="flex justify-between items-center text-[13px] text-fg-default tabular-nums pt-1.5 border-t border-border-default font-semibold">
-                  <span>Overages</span>
-                  <span>{formatCost(user.totals.netAmount)}</span>
-                </div>
-                {showExistingDiscountDisclaimer && <ExistingDiscountDisclaimer />}
-              </div>
-            </div>
-            <div className="bg-bg-default border border-border-default rounded-md px-5 py-7 text-center">
-              <div className="text-[13px] font-medium text-fg-muted uppercase tracking-wider mb-3">Usage-based billing (AICs)</div>
-              <div className="text-4xl font-bold leading-[1.2] text-app-savings-fg">{formatCost(user.totals.aicNetAmount)}</div>
-              <div className="text-sm text-fg-default mt-1.5">{formatAic(user.totals.aicQuantity)} AICs</div>
-              <div className="text-xs text-fg-muted mt-1">1 AIC = $0.01</div>
-              <div className="mt-4 pt-3 border-t border-border-default w-full flex flex-col gap-1.5 text-left">
-                <div className="flex justify-between items-center text-[13px] text-fg-default tabular-nums">
-                  <span>Consumed AICs</span>
-                  <span>{formatCost(user.totals.aicGrossAmount)}</span>
-                </div>
-                <div className="flex justify-between items-center text-[13px] text-fg-muted tabular-nums">
-                  <span>Included AICs</span>
-                  <span>−{formatCost(aicDiscountAmount)}</span>
-                </div>
-                <div className="flex justify-between items-center text-[13px] text-fg-default tabular-nums pt-1.5 border-t border-border-default font-semibold">
-                  <span>Additional usage</span>
-                  <span>{formatCost(user.totals.aicNetAmount)}</span>
-                </div>
-                {showExistingDiscountDisclaimer ? <ExistingDiscountDisclaimer /> : <PromotionalDataDisclaimer />}
-              </div>
-            </div>
-          </div>
-          <BillingProjectionDisclaimer className="mb-6" />
+          <BillingTotalsCards
+            pruNetAmount={user.totals.netAmount}
+            pruGrossAmount={user.totals.grossAmount}
+            pruDiscountAmount={user.totals.discountAmount}
+            pruQuantity={user.totals.requests}
+            aicNetAmount={user.totals.aicNetAmount}
+            aicGrossAmount={user.totals.aicGrossAmount}
+            aicDiscountAmount={aicDiscountAmount}
+            aicQuantity={user.totals.aicQuantity}
+            showExistingDiscountDisclaimer={reportPlanScope !== 'individual'}
+            showPromotionalDataDisclaimer={reportPlanScope === 'individual'}
+            showOrganizationPromotionalDataDisclaimer={reportPlanScope !== 'individual' && showOrganizationPromotionalDataDisclaimer}
+            reportMode={reportMode}
+            className="mb-3"
+          />
+          {!isNativeAiCredits && <BillingProjectionDisclaimer className="mb-6" />}
 
           <div className="grid grid-cols-1 gap-6 w-full">
             {productBreakdownRows.length > 0 && (
-              <ProductUsageTable title="Usage by Product" products={productBreakdownRows} />
+              <ProductUsageTable title="Usage by Product" products={productBreakdownRows} reportMode={reportMode} />
             )}
-            <MultiSeriesStackedBarChart title="Daily Requests by Model" labels={labels} series={requestSeries} height={340} />
+            {!isNativeAiCredits && <MultiSeriesStackedBarChart title="Daily Requests by Model" labels={labels} series={requestSeries} height={340} />}
             <MultiSeriesStackedBarChart title="Daily AI Credits by Model" labels={labels} series={aicSeries} height={340} />
+            {!isNativeAiCredits && (
             <DualAxisLineChart
               title="Cumulative net cost: PRU vs AIC"
               labels={labels}
@@ -311,6 +292,7 @@ export function UserDetailsView({
               formatYAsCurrency
               height={320}
             />
+            )}
           </div>
 
           <div className="bg-bg-default border border-border-default rounded-md overflow-auto">
@@ -319,11 +301,13 @@ export function UserDetailsView({
                 <tr>
                   <th className={th}>Date</th>
                   <th className={th}>Model</th>
-                  <th className={thNum}>PRUs</th>
+                  {!isNativeAiCredits && <th className={thNum}>PRUs</th>}
                   <th className={thNum}>AICs</th>
-                  <th className={thNum}>PRU Net Cost</th>
+                  {isNativeAiCredits && <th className={thNum}>AIC Gross Cost</th>}
+                  {isNativeAiCredits && <th className={thNum}>Included AICs</th>}
+                  {!isNativeAiCredits && <th className={thNum}>PRU Net Cost</th>}
                   <th className={thNum}>AIC Net Cost</th>
-                  <th className={thNum}>Difference</th>
+                  {!isNativeAiCredits && <th className={thNum}>Difference</th>}
                 </tr>
               </thead>
               <tbody>
@@ -339,14 +323,18 @@ export function UserDetailsView({
                           </td>
                         )}
                         <td className={`${td} font-medium text-fg-default`}>{`- ${row.model}`}</td>
-                        <td className={tdNum}>{formatInt(row.requests)}</td>
+                        {!isNativeAiCredits && <td className={tdNum}>{formatInt(row.requests)}</td>}
                         <td className={tdNum}>{formatAic(row.aicQuantity)}</td>
-                        <td className={tdNum}>{formatCost(row.netAmount)}</td>
+                        {isNativeAiCredits && <td className={tdNum}>{formatCost(row.aicGrossAmount)}</td>}
+                        {isNativeAiCredits && <td className={tdNum}>−{formatCost(row.aicDiscountAmount)}</td>}
+                        {!isNativeAiCredits && <td className={tdNum}>{formatCost(row.netAmount)}</td>}
                         <td className={tdNum}>{formatCost(row.aicNetAmount)}</td>
-                        <td className={`${tdNum} font-semibold ${diff > 0 ? 'text-app-savings-fg' : diff < 0 ? 'text-app-overspend-fg' : 'text-fg-muted'}`}>
-                          {diff > 0 ? '−' : diff < 0 ? '+' : ''}
-                          {formatCost(Math.abs(diff))}
-                        </td>
+                        {!isNativeAiCredits && (
+                          <td className={`${tdNum} font-semibold ${diff > 0 ? 'text-app-savings-fg' : diff < 0 ? 'text-app-overspend-fg' : 'text-fg-muted'}`}>
+                            {diff > 0 ? '−' : diff < 0 ? '+' : ''}
+                            {formatCost(Math.abs(diff))}
+                          </td>
+                        )}
                       </tr>
                     )
                   }),

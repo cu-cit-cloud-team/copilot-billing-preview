@@ -2,11 +2,12 @@ import { useState, useMemo } from 'react'
 import { InfoIcon } from '@primer/octicons-react'
 import type { ModelUsageResult, ModelDailyUsageData, ModelUsageTotals } from '../pipeline/aggregators/modelUsageAggregator'
 import { DualAxisLineChart, MultiSeriesStackedBarChart } from '../components'
-import { BillingProjectionDisclaimer, ExistingDiscountDisclaimer, PromotionalDataDisclaimer } from '../components/ui'
+import { BillingProjectionDisclaimer, BillingTotalsCards } from '../components/ui'
 import { th, thNum, td, tdNum } from '../components/ui/tableStyles'
 import { calculateAicDiscountAmount, calculateSavingsDifference } from '../utils/billingComparison'
 import { fillDataForRange } from '../utils/fillDataForRange'
 import { formatAic, formatUsd } from '../utils/format'
+import { isNativeAiCreditsMode, type ReportMode } from '../utils/reportMode'
 
 function createEmptyModelDailyUsage(date: string): ModelDailyUsageData {
   return {
@@ -26,6 +27,8 @@ type ModelsViewProps = {
   isIndividualReport: boolean
   rangeStart: string | null
   rangeEnd: string | null
+  reportMode?: ReportMode
+  showOrganizationPromotionalDataDisclaimer?: boolean
 }
 
 type ModelDriverRow = {
@@ -81,8 +84,16 @@ function getModelDriverSummary(modelUsage: ModelUsageResult): ModelDriverSummary
   }
 }
 
-export function ModelsView({ modelUsage, isIndividualReport, rangeStart, rangeEnd }: ModelsViewProps) {
+export function ModelsView({
+  modelUsage,
+  isIndividualReport,
+  rangeStart,
+  rangeEnd,
+  reportMode = 'transition-period-billing-preview',
+  showOrganizationPromotionalDataDisclaimer = true,
+}: ModelsViewProps) {
   const [selectedModel, setSelectedModel] = useState<string>(modelUsage.models[0] ?? '')
+  const isNativeAiCredits = isNativeAiCreditsMode(reportMode)
 
   const modelDriverSummary = useMemo(
     () => getModelDriverSummary(modelUsage),
@@ -122,7 +133,6 @@ export function ModelsView({ modelUsage, isIndividualReport, rangeStart, rangeEn
   const periodLabel = rangeStart
     ? new Date(rangeStart + 'T00:00:00').toLocaleString('en-US', { month: 'long', year: 'numeric' })
     : null
-  const showExistingDiscountDisclaimer = !isIndividualReport
 
   return (
     <section className="flex flex-col gap-3" aria-label="Models">
@@ -189,7 +199,7 @@ export function ModelsView({ modelUsage, isIndividualReport, rangeStart, rangeEn
         const savings = calculateSavingsDifference(selectedModelTotals.netAmount, selectedModelAicNetAmount)
         return (
           <>
-            {periodLabel && (
+            {!isNativeAiCredits && periodLabel && (
               <p className="text-base font-normal text-center mb-1 text-fg-default">
                 {savings > 0 ? (
                   <><strong>{selectedModel}</strong>'s <strong>{periodLabel}</strong> usage would cost{' '}<strong>{formatUsd(savings)} less</strong> under usage-based billing</>
@@ -201,120 +211,96 @@ export function ModelsView({ modelUsage, isIndividualReport, rangeStart, rangeEn
               </p>
             )}
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-3">
-              <div className="bg-bg-default border border-border-default rounded-md px-5 py-4 text-center py-7">
-                <div className="text-[13px] font-medium text-fg-muted uppercase tracking-wide mb-3">Current billing (PRUs)</div>
-                <div className="text-4xl font-bold leading-tight text-fg-default">{formatUsd(selectedModelTotals.netAmount)}</div>
-                <div className="text-sm text-fg-default mt-1.5">{selectedModelTotals.requests.toLocaleString()} PRUs</div>
-                <div className="text-xs text-fg-muted mt-1">1 PRU = $0.04</div>
-                <div className="mt-4 pt-3 border-t border-border-default w-full flex flex-col gap-1.5 text-left">
-                  <div className="flex justify-between items-center text-[13px] text-fg-default tabular-nums">
-                    <span>Consumed PRUs</span>
-                    <span>{formatUsd(selectedModelTotals.grossAmount)}</span>
-                  </div>
-                  <div className="flex justify-between items-center text-[13px] text-fg-muted tabular-nums">
-                    <span>Included PRUs</span>
-                    <span>−{formatUsd(selectedModelTotals.discountAmount)}</span>
-                  </div>
-                  <div className="flex justify-between items-center text-[13px] text-fg-default tabular-nums pt-1.5 border-t border-border-default font-semibold">
-                    <span>Overages</span>
-                    <span>{formatUsd(selectedModelTotals.netAmount)}</span>
-                  </div>
-                  {showExistingDiscountDisclaimer && <ExistingDiscountDisclaimer />}
-                </div>
-              </div>
-              <div className="bg-bg-default border border-border-default rounded-md px-5 py-4 text-center py-7">
-                <div className="text-[13px] font-medium text-fg-muted uppercase tracking-wide mb-3">Usage-based billing (AICs)</div>
-                <div className="text-4xl font-bold leading-tight text-app-savings-fg">{formatUsd(selectedModelAicNetAmount)}</div>
-                <div className="text-sm text-fg-default mt-1.5">{formatAic(selectedModelTotals.aicQuantity)} AICs</div>
-                <div className="text-xs text-fg-muted mt-1">1 AIC = $0.01</div>
-                <div className="mt-4 pt-3 border-t border-border-default w-full flex flex-col gap-1.5 text-left">
-                  <div className="flex justify-between items-center text-[13px] text-fg-default tabular-nums">
-                    <span>Consumed AICs</span>
-                    <span>{formatUsd(selectedModelTotals.aicGrossAmount)}</span>
-                  </div>
-                  <div className="flex justify-between items-center text-[13px] text-fg-muted tabular-nums">
-                    <span>Included AICs</span>
-                    <span>−{formatUsd(selectedModelAicDiscount)}</span>
-                  </div>
-                  <div className="flex justify-between items-center text-[13px] text-fg-default tabular-nums pt-1.5 border-t border-border-default font-semibold">
-                    <span>Additional usage</span>
-                    <span>{formatUsd(selectedModelAicNetAmount)}</span>
-                  </div>
-                  {showExistingDiscountDisclaimer ? <ExistingDiscountDisclaimer /> : <PromotionalDataDisclaimer />}
-                </div>
-              </div>
-            </div>
-            <BillingProjectionDisclaimer className="mb-6" />
+            <BillingTotalsCards
+              pruNetAmount={selectedModelTotals.netAmount}
+              pruGrossAmount={selectedModelTotals.grossAmount}
+              pruDiscountAmount={selectedModelTotals.discountAmount}
+              pruQuantity={selectedModelTotals.requests}
+              aicNetAmount={selectedModelAicNetAmount}
+              aicGrossAmount={selectedModelTotals.aicGrossAmount}
+              aicDiscountAmount={selectedModelAicDiscount}
+              aicQuantity={selectedModelTotals.aicQuantity}
+              showExistingDiscountDisclaimer={!isIndividualReport}
+              showPromotionalDataDisclaimer={isIndividualReport}
+              showOrganizationPromotionalDataDisclaimer={!isIndividualReport && showOrganizationPromotionalDataDisclaimer}
+              reportMode={reportMode}
+              className="mb-3"
+            />
+            {!isNativeAiCredits && <BillingProjectionDisclaimer className="mb-6" />}
           </>
         )
       })()}
 
       {selectedModel && filledPerModelDailyData.length > 0 && (
         <div className="grid grid-cols-1 gap-6 w-full">
-          <div className="flex flex-col gap-[10px]">
-            <MultiSeriesStackedBarChart
-              title={`Daily average AICs per PRU (${selectedModel})`}
-              labels={dailyAverageAicPerRequest.map((day) => day.date)}
-              series={[
-                {
-                  label: 'Average daily AICs per PRU',
-                  color: '#14b8a6',
-                  data: dailyAverageAicPerRequest.map((day) => day.averageAicPerRequest),
-                },
-              ]}
-              height={320}
-            />
-            <p className="m-0 text-base font-normal text-center text-fg-default">
-              Average AICs per PRU for <strong>{selectedModel}</strong> in the current report period:{' '}
-              <strong>{formatAverageAicPerRequest(overallAverageAicPerRequest)}</strong>, average gross per PRU{' '}
-              <strong>{formatUsd(overallAverageAicGrossPerRequest)}</strong>
-            </p>
-            <p className="m-0 text-[13px] text-center text-fg-muted leading-normal">
-              Note: PRU quantities include billing-period model multipliers, so AICs per PRU should not be read as AICs per actual request when comparing models.
-            </p>
-          </div>
+          {!isNativeAiCredits && (
+            <>
+              <div className="flex flex-col gap-[10px]">
+                <MultiSeriesStackedBarChart
+                  title={`Daily average AICs per PRU (${selectedModel})`}
+                  labels={dailyAverageAicPerRequest.map((day) => day.date)}
+                  series={[
+                    {
+                      label: 'Average daily AICs per PRU',
+                      color: '#14b8a6',
+                      data: dailyAverageAicPerRequest.map((day) => day.averageAicPerRequest),
+                    },
+                  ]}
+                  height={320}
+                />
+                <p className="m-0 text-base font-normal text-center text-fg-default">
+                  Average AICs per PRU for <strong>{selectedModel}</strong> in the current report period:{' '}
+                  <strong>{formatAverageAicPerRequest(overallAverageAicPerRequest)}</strong>, average gross per PRU{' '}
+                  <strong>{formatUsd(overallAverageAicGrossPerRequest)}</strong>
+                </p>
+                <p className="m-0 text-[13px] text-center text-fg-muted leading-normal">
+                  Note: PRU quantities include billing-period model multipliers, so AICs per PRU should not be read as AICs per actual request when comparing models.
+                </p>
+              </div>
+              <DualAxisLineChart
+                title={`Daily PRUs & AI Credits (${selectedModel})`}
+                labels={filledPerModelDailyData.map((day) => day.date)}
+                series={[
+                  {
+                    label: 'PRUs',
+                    color: '#6366f1',
+                    data: filledPerModelDailyData.map((day) => day.requests),
+                    yAxisID: 'y',
+                  },
+                  {
+                    label: 'AI Credits',
+                    color: '#22c55e',
+                    data: filledPerModelDailyData.map((day) => day.aicQuantity),
+                    yAxisID: 'y1',
+                  },
+                ]}
+                height={320}
+              />
+            </>
+          )}
           <DualAxisLineChart
-            title={`Daily PRUs & AI Credits (${selectedModel})`}
+            title={`Daily AI Credits gross cost (${selectedModel})`}
             labels={filledPerModelDailyData.map((day) => day.date)}
             series={[
-              {
-                label: 'PRUs',
-                color: '#6366f1',
-                data: filledPerModelDailyData.map((day) => day.requests),
-                yAxisID: 'y',
-              },
-              {
-                label: 'AI Credits',
-                color: '#22c55e',
-                data: filledPerModelDailyData.map((day) => day.aicQuantity),
-                yAxisID: 'y1',
-              },
-            ]}
-            height={320}
-          />
-          <DualAxisLineChart
-            title={`Daily Gross Breakdown (${selectedModel})`}
-            labels={filledPerModelDailyData.map((day) => day.date)}
-            series={[
-              {
-                label: 'PRU Gross Cost',
-                color: '#f59e0b',
-                data: filledPerModelDailyData.map((day) => day.grossAmount),
-                yAxisID: 'y',
-              },
               {
                 label: 'AIC Gross Cost',
                 color: '#06b6d4',
                 data: filledPerModelDailyData.map((day) => day.aicGrossAmount),
                 yAxisID: 'y',
               },
+              {
+                label: 'AIC Net Cost',
+                color: '#22c55e',
+                data: filledPerModelDailyData.map((day) => day.aicNetAmount),
+                yAxisID: 'y',
+              },
             ]}
+            formatYAsCurrency
             height={320}
           />
           <div className="flex items-start gap-[10px] px-4 py-3 bg-bg-accent-muted border border-border-accent/25 rounded-md mt-2">
             <InfoIcon size={16} className="fill-fg-accent shrink-0 mt-0.5" aria-hidden />
-            <p className="m-0 text-[13px] text-fg-default leading-normal">Gross cost is shown before included-credits discounts. Under usage-based billing, included AICs from the account-wide pool will reduce net costs.</p>
+            <p className="m-0 text-[13px] text-fg-default leading-normal">Gross cost is shown before included-credits discounts. Included AICs from the account-wide pool reduce net costs.</p>
           </div>
         </div>
       )}

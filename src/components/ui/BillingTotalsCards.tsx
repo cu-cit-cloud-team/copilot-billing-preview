@@ -1,6 +1,7 @@
 import { appLinks } from '../../config/links'
 import type { IndividualPlanUpgradeRecommendation } from '../../utils/individualPlanUpgrade'
 import { formatAic, formatUsd } from '../../utils/format'
+import { isNativeAiCreditsMode, type ReportMode } from '../../utils/reportMode'
 import { ExistingDiscountDisclaimer } from './ExistingDiscountDisclaimer'
 import { PromotionalDataDisclaimer } from './PromotionalDataDisclaimer'
 
@@ -20,9 +21,11 @@ export type BillingTotalsCardsProps = {
   }
   showExistingDiscountDisclaimer?: boolean
   showPromotionalDataDisclaimer?: boolean
+  showOrganizationPromotionalDataDisclaimer?: boolean
   upgradeRecommendation?: IndividualPlanUpgradeRecommendation | null
   onAdjustSeatCounts?: () => void
   className?: string
+  reportMode?: ReportMode
 }
 
 export function BillingTotalsCards({
@@ -38,12 +41,15 @@ export function BillingTotalsCards({
   licenseSeatCounts,
   showExistingDiscountDisclaimer = false,
   showPromotionalDataDisclaimer = false,
+  showOrganizationPromotionalDataDisclaimer = showExistingDiscountDisclaimer,
   upgradeRecommendation = null,
   onAdjustSeatCounts,
   className = '',
+  reportMode = 'transition-period-billing-preview',
 }: BillingTotalsCardsProps) {
   const pruTotalAmount = pruNetAmount + (licenseAmount ?? 0)
   const aicTotalAmount = aicNetAmount + (licenseAmount ?? 0)
+  const isNativeAiCredits = isNativeAiCreditsMode(reportMode)
 
   return (
     <div className={`flex flex-col gap-3 ${className}`.trim()}>
@@ -65,46 +71,48 @@ export function BillingTotalsCards({
           )}
         </p>
       )}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <div className="bg-bg-default border border-border-default rounded-md px-5 py-[28px] text-center">
-          <div className="text-[13px] font-medium text-fg-muted uppercase tracking-[0.5px] mb-3">Current billing (PRUs)</div>
-          <div className="text-4xl font-bold leading-[1.2] text-fg-default">{formatUsd(pruTotalAmount)}</div>
-          <div className="text-sm text-fg-default mt-[6px]">{pruQuantity.toLocaleString()} PRUs</div>
-          <div className="text-xs text-fg-muted mt-1">1 PRU = $0.04</div>
-          <div className="mt-4 pt-3 border-t border-border-default w-full flex flex-col gap-[6px] text-left">
-            <div className="flex justify-between items-center text-[13px] text-fg-default tabular-nums">
-              <span>Consumed PRUs</span>
-              <span>{formatUsd(pruGrossAmount)}</span>
-            </div>
-            <div className="flex justify-between items-center text-[13px] text-fg-muted tabular-nums">
-              <span>Included PRUs</span>
-              <span>−{formatUsd(pruDiscountAmount)}</span>
-            </div>
-            <div className="pt-[6px] border-t border-dotted border-border-muted flex flex-col gap-[6px]">
+      <div className={`grid grid-cols-1 ${isNativeAiCredits ? '' : 'sm:grid-cols-2'} gap-4`.trim()}>
+        {!isNativeAiCredits && (
+          <div className="bg-bg-default border border-border-default rounded-md px-5 py-[28px] text-center">
+            <div className="text-[13px] font-medium text-fg-muted uppercase tracking-[0.5px] mb-3">Current billing (PRUs)</div>
+            <div className="text-4xl font-bold leading-[1.2] text-fg-default">{formatUsd(pruTotalAmount)}</div>
+            <div className="text-sm text-fg-default mt-[6px]">{pruQuantity.toLocaleString()} PRUs</div>
+            <div className="text-xs text-fg-muted mt-1">1 PRU = $0.04</div>
+            <div className="mt-4 pt-3 border-t border-border-default w-full flex flex-col gap-[6px] text-left">
               <div className="flex justify-between items-center text-[13px] text-fg-default tabular-nums">
-                <span>Overages</span>
-                <span>{formatUsd(pruNetAmount)}</span>
+                <span>Consumed PRUs</span>
+                <span>{formatUsd(pruGrossAmount)}</span>
               </div>
-              {licenseAmount !== undefined && (
+              <div className="flex justify-between items-center text-[13px] text-fg-muted tabular-nums">
+                <span>Included PRUs</span>
+                <span>−{formatUsd(pruDiscountAmount)}</span>
+              </div>
+              <div className="pt-[6px] border-t border-dotted border-border-muted flex flex-col gap-[6px]">
                 <div className="flex justify-between items-center text-[13px] text-fg-default tabular-nums">
-                  <span>License cost</span>
-                  <span>{formatUsd(licenseAmount)}</span>
+                  <span>Overages</span>
+                  <span>{formatUsd(pruNetAmount)}</span>
                 </div>
-              )}
-              {(licenseAmount !== undefined || showExistingDiscountDisclaimer) && (
-                <div className="pt-[6px] border-t border-border-default">
-                  {licenseAmount !== undefined && (
-                    <div className="flex justify-between items-center text-[13px] text-fg-default tabular-nums font-semibold">
-                      <span>Total (license + overages)</span>
-                      <span>{formatUsd(pruTotalAmount)}</span>
-                    </div>
-                  )}
-                  {showExistingDiscountDisclaimer && <ExistingDiscountDisclaimer />}
-                </div>
-              )}
+                {licenseAmount !== undefined && (
+                  <div className="flex justify-between items-center text-[13px] text-fg-default tabular-nums">
+                    <span>License cost</span>
+                    <span>{formatUsd(licenseAmount)}</span>
+                  </div>
+                )}
+                {(licenseAmount !== undefined || showExistingDiscountDisclaimer) && (
+                  <div className="pt-[6px] border-t border-border-default">
+                    {licenseAmount !== undefined && (
+                      <div className="flex justify-between items-center text-[13px] text-fg-default tabular-nums font-semibold">
+                        <span>Total (license + overages)</span>
+                        <span>{formatUsd(pruTotalAmount)}</span>
+                      </div>
+                    )}
+                    {showExistingDiscountDisclaimer && <ExistingDiscountDisclaimer />}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
-        </div>
+        )}
         <div className="bg-bg-default border border-border-default rounded-md px-5 py-[28px] text-center">
           <div className="text-[13px] font-medium text-fg-muted uppercase tracking-[0.5px] mb-3">Usage-based billing (AICs)</div>
           <div className="text-4xl font-bold leading-[1.2] text-app-savings-fg">{formatUsd(aicTotalAmount)}</div>
@@ -130,7 +138,7 @@ export function BillingTotalsCards({
                   <span>{formatUsd(licenseAmount)}</span>
                 </div>
               )}
-              {(licenseAmount !== undefined || showExistingDiscountDisclaimer || showPromotionalDataDisclaimer) && (
+              {(licenseAmount !== undefined || showExistingDiscountDisclaimer || showPromotionalDataDisclaimer || showOrganizationPromotionalDataDisclaimer) && (
                 <div className="pt-[6px] border-t border-border-default">
                   {licenseAmount !== undefined && (
                     <div className="flex justify-between items-center text-[13px] text-fg-default tabular-nums font-semibold">
@@ -138,12 +146,8 @@ export function BillingTotalsCards({
                       <span>{formatUsd(aicTotalAmount)}</span>
                     </div>
                   )}
-                  {showExistingDiscountDisclaimer && (
-                    <>
-                      <ExistingDiscountDisclaimer />
-                      <PromotionalDataDisclaimer scope="organization" />
-                    </>
-                  )}
+                  {showExistingDiscountDisclaimer && <ExistingDiscountDisclaimer />}
+                  {showOrganizationPromotionalDataDisclaimer && <PromotionalDataDisclaimer scope="organization" />}
                   {showPromotionalDataDisclaimer && <PromotionalDataDisclaimer />}
                 </div>
               )}
