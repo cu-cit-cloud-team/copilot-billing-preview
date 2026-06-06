@@ -1,5 +1,6 @@
 import type { Aggregator } from './aggregators/base'
 import { createAicIncludedCreditsAllocator, type AicIncludedCreditsOverrides } from './aicIncludedCredits'
+import { resolveIncludedCreditsPolicy } from './includedCreditsPolicy'
 import {
   InvalidReportError,
   parseTokenUsageHeader,
@@ -92,6 +93,7 @@ export async function runPipeline(
   const { includedCreditsOverrides = {}, progressResolution = 500, onProgress } = options ?? {}
   const reportAdapter = await validateFileFormat(file)
   const reportMetadata = reportAdapter.metadata
+  const includedCreditsPolicy = resolveIncludedCreditsPolicy(reportMetadata)
   let lastProgressStage: PipelineProgress['stage'] | null = null
   let lastProgressPercent = -1
   let lastProgressTimestamp = 0
@@ -138,6 +140,7 @@ export async function runPipeline(
   }
 
   const aicIncludedCreditAllocator = await createAicIncludedCreditsAllocator(file, includedCreditsOverrides, {
+    includedCreditsPolicy,
     onProgress: (streamProgress) => {
       emitProgress('analyzing', 0, streamProgress)
     },
