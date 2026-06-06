@@ -51,7 +51,6 @@ const NATIVE_AI_CREDITS_HEADER = [
 const TRANSITION_PERIOD_METADATA: ReportFormatMetadata = {
   format: 'transition-period-billing-preview',
   label: 'Transition Period Billing Preview report',
-  supported: true,
 }
 
 function buildRow(values: string[]): string {

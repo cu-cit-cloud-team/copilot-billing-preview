@@ -1,5 +1,5 @@
 import type { TokenUsageRecord } from '../parser'
-import { getDefaultSupportedUsageReportAdapter, type ReportFormat, type ReportFormatMetadata } from '../reportAdapters'
+import { getDefaultUsageReportAdapter, type ReportFormat, type ReportFormatMetadata } from '../reportAdapters'
 import { getReportUsageMetrics } from '../reportUsageMetrics'
 
 export type AggregatorUsageMetrics = {
@@ -16,7 +16,7 @@ export function getAggregatorReportFormat(
   reportMetadataOrFormat?: ReportFormat | ReportFormatMetadata,
 ): ReportFormat {
   if (!reportMetadataOrFormat) {
-    return getDefaultSupportedUsageReportAdapter().metadata.format
+    return getDefaultUsageReportAdapter().metadata.format
   }
 
   return typeof reportMetadataOrFormat === 'string'

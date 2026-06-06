@@ -146,7 +146,6 @@ function App() {
         userAggregator,
       ]
     }, {
-      enableNativeAiCreditsProcessing: true,
       includedCreditsOverrides,
       progressResolution: 500,
       onProgress,
