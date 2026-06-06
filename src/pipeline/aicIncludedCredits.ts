@@ -1,5 +1,6 @@
 import {
   getAicUsageMetrics,
+  parseNativeAiCreditsUsageRecord,
   parseTokenUsageHeader,
   parseNormalizedTokenUsageRecord,
   type TokenUsageHeader,
@@ -254,6 +255,18 @@ function resolvePolicyForContext(
   return TRANSITION_PERIOD_INCLUDED_CREDITS_POLICY
 }
 
+function parseIncludedCreditsRecord(
+  line: string,
+  header: TokenUsageHeader,
+  options: AicIncludedCreditsProgressOptions | undefined,
+): TokenUsageRecord | null {
+  if (options?.reportMetadata?.format === 'native-ai-credits') {
+    return parseNativeAiCreditsUsageRecord(line, header)
+  }
+
+  return parseNormalizedTokenUsageRecord(line, header)
+}
+
 export function calculateLicenseSummary(
   users: Array<{ totalMonthlyQuota: number } & ReportScopeUser>,
   policy: IncludedCreditsPolicy = TRANSITION_PERIOD_INCLUDED_CREDITS_POLICY,
@@ -318,7 +331,7 @@ export async function calculateAicIncludedCreditsContext(
       continue
     }
 
-    const record = parseNormalizedTokenUsageRecord(trimmed, header)
+    const record = parseIncludedCreditsRecord(trimmed, header, options)
     if (!record) continue
 
     reportPeriod = includeDateInReportPeriod(reportPeriod, record.date)

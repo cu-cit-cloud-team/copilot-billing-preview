@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 
 import type { Aggregator } from './aggregators/base'
+import { DailyUsageAggregator } from './aggregators/dailyUsageAggregator'
+import { UserUsageAggregator } from './aggregators/userUsageAggregator'
 import {
   InvalidReportError,
   UnsupportedNativeAiCreditsReportError,
@@ -54,6 +56,12 @@ const TRANSITION_PERIOD_REPORT_METADATA = {
   label: 'Transition Period Billing Preview report',
   supported: true,
 }
+
+const NATIVE_AI_CREDITS_REPORT_METADATA = {
+  format: 'native-ai-credits',
+  label: 'Native AI Credits report',
+  supported: false,
+} as const
 
 function createCsv(rows: string[][], header = HEADER): File {
   const body = [header, ...rows.map((row) => row.join(','))].join('\n')
@@ -158,6 +166,181 @@ describe('runPipeline', () => {
     await expect(runPipeline(file, [aggregator])).rejects.toThrow(UnsupportedNativeAiCreditsReportError)
     expect(aggregator.headerCalls()).toBe(0)
     expect(aggregator.result()).toEqual([])
+  })
+
+  it('processes native AI Credits reports with native metadata when explicitly enabled', async () => {
+    const file = createCsv([
+      [
+        '5/29/26',
+        'mona',
+        'copilot',
+        'copilot_ai_credit',
+        'Auto: Claude Haiku 4.5',
+        '96.9990345',
+        'ai-credits',
+        '0.01',
+        '0.969990345',
+        '0',
+        '0.969990345',
+        '3900',
+        'example-org',
+        'Cost Center A',
+        '999',
+        '999',
+      ],
+    ], NATIVE_AI_CREDITS_HEADER)
+    const aggregator = new CaptureAggregator()
+
+    const result = await runPipeline(file, [aggregator], {
+      enableNativeAiCreditsProcessing: true,
+    })
+
+    expect(result).toEqual({
+      reportMetadata: NATIVE_AI_CREDITS_REPORT_METADATA,
+      reportRowCount: 1,
+      processedRowCount: 1,
+    })
+    expect(aggregator.headerCalls()).toBe(1)
+    expect(aggregator.result()).toEqual([
+      expect.objectContaining({
+        date: '2026-05-29',
+        username: 'mona',
+        quantity: 96.9990345,
+        gross_amount: 0.969990345,
+        net_amount: 0.969990345,
+        aic_quantity: 96.9990345,
+        aic_gross_amount: 0.969990345,
+        has_aic_quantity: true,
+        has_aic_gross_amount: true,
+      }),
+    ])
+  })
+
+  it('aggregates flagged native AI Credits rows with native-format aggregators', async () => {
+    const file = createCsv([
+      [
+        '5/29/26',
+        'mona',
+        'copilot',
+        'copilot_ai_credit',
+        'GPT-5.2',
+        '10',
+        'ai-credits',
+        '0.01',
+        '100',
+        '20',
+        '80',
+        '3900',
+        'example-org',
+        'Cost Center A',
+        '999',
+        '999',
+      ],
+      [
+        '05/29/2026',
+        'hubot',
+        'spark',
+        'spark_ai_credit',
+        'GPT-5.2',
+        '25',
+        'ai-credits',
+        '0.01',
+        '250',
+        '50',
+        '200',
+        '7000',
+        'octodemo',
+        'Cost Center A',
+        '',
+        '',
+      ],
+    ], NATIVE_AI_CREDITS_HEADER)
+    const daily = new DailyUsageAggregator(NATIVE_AI_CREDITS_REPORT_METADATA)
+    const users = new UserUsageAggregator(NATIVE_AI_CREDITS_REPORT_METADATA)
+
+    await runPipeline(file, [daily, users], {
+      enableNativeAiCreditsProcessing: true,
+    })
+
+    expect(daily.result().dailyData).toEqual([
+      expect.objectContaining({
+        date: '2026-05-29',
+        requests: 0,
+        grossAmount: 0,
+        discountAmount: 0,
+        netAmount: 0,
+        aicQuantity: 35,
+        aicGrossAmount: 350,
+        aicNetAmount: 280,
+      }),
+    ])
+    expect(users.result().users).toEqual([
+      expect.objectContaining({
+        username: 'hubot',
+        totals: expect.objectContaining({
+          requests: 0,
+          grossAmount: 0,
+          discountAmount: 0,
+          netAmount: 0,
+          aicQuantity: 25,
+          aicGrossAmount: 250,
+          aicNetAmount: 200,
+        }),
+      }),
+      expect.objectContaining({
+        username: 'mona',
+        totals: expect.objectContaining({
+          requests: 0,
+          grossAmount: 0,
+          discountAmount: 0,
+          netAmount: 0,
+          aicQuantity: 10,
+          aicGrossAmount: 100,
+          aicNetAmount: 80,
+        }),
+      }),
+    ])
+  })
+
+  it('selects native summer and September included-credit policies for flagged native reports', async () => {
+    const createNativePolicyCsv = (date: string) => createCsv([
+      [
+        date,
+        'mona',
+        'copilot',
+        'copilot_ai_credit',
+        'GPT-5.2',
+        '5000',
+        'ai-credits',
+        '0.01',
+        '50',
+        '0',
+        '50',
+        '3900',
+        'example-org',
+        'Cost Center A',
+        '5000',
+        '50',
+      ],
+    ], NATIVE_AI_CREDITS_HEADER)
+    const summerAggregator = new CaptureAggregator()
+    const septemberAggregator = new CaptureAggregator()
+
+    await runPipeline(createNativePolicyCsv('8/31/26'), [summerAggregator], {
+      enableNativeAiCreditsProcessing: true,
+    })
+    await runPipeline(createNativePolicyCsv('9/1/26'), [septemberAggregator], {
+      enableNativeAiCreditsProcessing: true,
+    })
+
+    expect(summerAggregator.result()[0]).toEqual(expect.objectContaining({
+      date: '2026-08-31',
+      aic_net_amount: 0,
+    }))
+    expect(septemberAggregator.result()[0]).toEqual(expect.objectContaining({
+      date: '2026-09-01',
+    }))
+    expect(septemberAggregator.result()[0].aic_net_amount).toBeCloseTo(11)
   })
 
   it('returns transition-period metadata while processing supported reports', async () => {

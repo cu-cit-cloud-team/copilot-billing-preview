@@ -24,6 +24,10 @@ export interface UsageReportAdapter {
   parseRecord(line: string, header: TokenUsageHeader): TokenUsageRecord | null
 }
 
+export interface UsageReportValidationOptions {
+  allowUnsupportedNativeAiCredits?: boolean
+}
+
 const TRANSITION_PERIOD_BILLING_PREVIEW_REPORT_ADAPTER: UsageReportAdapter = {
   metadata: {
     format: 'transition-period-billing-preview',
@@ -89,9 +93,12 @@ export function selectUsageReportAdapter(header: TokenUsageHeader, firstRecord: 
 export function validateUsageReportFirstRecord(
   header: TokenUsageHeader,
   firstRecord: TokenUsageRecord,
+  options?: UsageReportValidationOptions,
 ): UsageReportAdapter {
   const adapter = selectUsageReportAdapter(header, firstRecord)
   adapter.validateHeader(header)
-  adapter.validateFirstRecord(header, firstRecord)
+  if (!(options?.allowUnsupportedNativeAiCredits && adapter.metadata.format === 'native-ai-credits')) {
+    adapter.validateFirstRecord(header, firstRecord)
+  }
   return adapter
 }
