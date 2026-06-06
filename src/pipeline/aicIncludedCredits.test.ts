@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   BUSINESS_MONTHLY_AIC_INCLUDED_CREDITS,
   BUSINESS_MONTHLY_QUOTA,
+  calculateAicIncludedCreditsContext,
   calculateAicIncludedCreditsPool,
   calculateLicenseSummary,
   ENTERPRISE_MONTHLY_AIC_INCLUDED_CREDITS,
@@ -51,10 +52,38 @@ const HEADER = [
   'aic_quantity',
   'aic_gross_amount',
 ].join(',')
+const NATIVE_AI_CREDITS_HEADER = [
+  'date',
+  'username',
+  'product',
+  'sku',
+  'model',
+  'quantity',
+  'unit_type',
+  'applied_cost_per_quantity',
+  'gross_amount',
+  'discount_amount',
+  'net_amount',
+  'total_monthly_quota',
+  'organization',
+  'cost_center_name',
+  'aic_quantity',
+  'aic_gross_amount',
+].join(',')
+const NATIVE_AI_CREDITS_REPORT_METADATA = {
+  format: 'native-ai-credits',
+  label: 'Native AI Credits report',
+  supported: false,
+} as const
 const UNKNOWN_HIGH_MONTHLY_QUOTA = 2147483647
 
 function createCsv(rows: string[][]): File {
   const body = [HEADER, ...rows.map((row) => row.join(','))].join('\n')
+  return new File([body], 'usage.csv', { type: 'text/csv' })
+}
+
+function createNativeCsv(rows: string[][]): File {
+  const body = [NATIVE_AI_CREDITS_HEADER, ...rows.map((row) => row.join(','))].join('\n')
   return new File([body], 'usage.csv', { type: 'text/csv' })
 }
 
@@ -323,6 +352,26 @@ describe('AIC included credit tiering and pool sizing', () => {
     await expect(calculateAicIncludedCreditsPool(file, { business: 2, enterprise: 1 })).resolves.toBe(
       (2 * BUSINESS_MONTHLY_AIC_INCLUDED_CREDITS) + ENTERPRISE_MONTHLY_AIC_INCLUDED_CREDITS,
     )
+  })
+
+  it('derives native report periods before selecting native included credit policies', async () => {
+    const summerFile = createNativeCsv([
+      ['2026-08-31', 'mona', 'copilot', 'copilot_ai_credit', 'GPT-5', '10', 'ai-credits', '0.01', '0.10', '0', '0.10', '3900', 'example-org', 'Cost Center A', '10', '0.10'],
+    ])
+    const standardFile = createNativeCsv([
+      ['2026-09-01', 'mona', 'copilot', 'copilot_ai_credit', 'GPT-5', '10', 'ai-credits', '0.01', '0.10', '0', '0.10', '3900', 'example-org', 'Cost Center A', '10', '0.10'],
+    ])
+
+    await expect(calculateAicIncludedCreditsContext(summerFile, {}, {
+      reportMetadata: NATIVE_AI_CREDITS_REPORT_METADATA,
+    })).resolves.toMatchObject({
+      organizationIncludedCreditsPool: 7000,
+    })
+    await expect(calculateAicIncludedCreditsContext(standardFile, {}, {
+      reportMetadata: NATIVE_AI_CREDITS_REPORT_METADATA,
+    })).resolves.toMatchObject({
+      organizationIncludedCreditsPool: 3900,
+    })
   })
 
   it('uses the maximum quota seen for the same user before applying individual-plan classification', async () => {

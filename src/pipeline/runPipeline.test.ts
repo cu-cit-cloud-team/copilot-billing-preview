@@ -132,7 +132,7 @@ describe('runPipeline', () => {
     expect(aggregator.result()).toEqual([])
   })
 
-  it('rejects native AI Credits reports before processing rows', async () => {
+  it('rejects native AI Credits reports before aggregator calls', async () => {
     const file = createCsv([
       [
         '5/29/26',
@@ -184,6 +184,23 @@ describe('runPipeline', () => {
       reportRowCount: 2,
       processedRowCount: 1,
     })
+  })
+
+  it('keeps transition-period allocation for supported reports after the native policy boundary', async () => {
+    const file = createCsv([
+      ['2026-09-01', 'mona', 'copilot', 'copilot_ai_credit', 'GPT-5', '3000', 'ai-credits', '0.01', '30.00', '0', '30.00', 'False', '300', 'example-org', 'Cost Center A', '3000', '30.00'],
+    ])
+    const aggregator = new CaptureAggregator()
+
+    await runPipeline(file, [aggregator])
+
+    expect(aggregator.result()).toEqual([
+      expect.objectContaining({
+        username: 'mona',
+        total_monthly_quota: 300,
+        aic_net_amount: 0,
+      }),
+    ])
   })
 
   it('emits weighted progress for analysis and processing stages', async () => {
