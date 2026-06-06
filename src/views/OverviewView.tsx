@@ -7,6 +7,7 @@ import { AIC_UNIT_PRICE_USD } from '../utils/billingConstants'
 import { fillDataForRange } from '../utils/fillDataForRange'
 import { formatUsd } from '../utils/format'
 import type { IndividualPlanUpgradeRecommendation } from '../utils/individualPlanUpgrade'
+import { isNativeAiCreditsMode, type ReportMode } from '../utils/reportMode'
 
 type OverviewViewProps = {
   error: string | null
@@ -23,6 +24,8 @@ type OverviewViewProps = {
   reportPlanScope?: ReportPlanScope
   upgradeRecommendation?: IndividualPlanUpgradeRecommendation | null
   onAdjustSeatCounts?: () => void
+  reportMode?: ReportMode
+  showOrganizationPromotionalDataDisclaimer?: boolean
 }
 
 const CURRENT_AIC_COLOR = '#1a7f37'
@@ -54,8 +57,11 @@ export function OverviewView({
   reportPlanScope = 'organization',
   upgradeRecommendation = null,
   onAdjustSeatCounts,
+  reportMode = 'transition-period-billing-preview',
+  showOrganizationPromotionalDataDisclaimer = true,
 }: OverviewViewProps) {
   const filledDailyUsageData = fillDataForRange(dailyUsageData, rangeStart, rangeEnd, createEmptyDailyUsage)
+  const isNativeAiCredits = isNativeAiCreditsMode(reportMode)
 
   const overviewTotals = dailyUsageData.reduce(
     (totals, day) => {
@@ -90,6 +96,10 @@ export function OverviewView({
   const includedCreditsCardBody = reportPlanScope === 'individual'
     ? 'Under usage-based billing, your Copilot plan includes AI Credits each month. Usage consumes those included credits first; additional usage is billed only after they are used.'
     : 'Under usage-based billing, included credits will be pooled across all licensed users in your account. No more unused capacity going to waste from idle users.'
+  const nativeIncludedCreditsCardTitle = reportPlanScope === 'individual' ? 'Included AI Credits' : 'Included AI Credits pool'
+  const nativeIncludedCreditsCardBody = reportPlanScope === 'individual'
+    ? 'Your Copilot plan includes AI Credits each month. Usage consumes those included credits first; additional usage is billed only after they are used.'
+    : 'Included credits are pooled across all licensed users in your account. Additional usage spend starts after the account-wide included value is used.'
   const includedCreditsDocsUrl = reportPlanScope === 'individual'
     ? appLinks.usageBasedBillingForIndividualsDocs
     : appLinks.aiCreditsForOrganizationsDocs
@@ -110,27 +120,29 @@ export function OverviewView({
 
       {dailyUsageData.length > 0 && (
         <section>
-          <div className="bg-bg-accent-muted border border-border-accent/25 rounded-md py-5 px-6 mb-5 flex flex-col gap-2">
-            <h2 className="m-0 text-base font-semibold text-fg-default">GitHub Copilot is moving to usage-based billing</h2>
-            <p className="m-0 text-sm text-fg-default leading-normal">
-              Starting June 1, 2026, Copilot usage will be measured in AI Credits (AICs) instead of Premium Requests (PRUs). <strong className="text-[15px] font-bold bg-bg-default py-[2px] px-2 rounded-[4px] whitespace-nowrap">1 AIC = $0.01.</strong> This is a preview estimate based on your uploaded report. Actual bills under usage-based billing may differ based on model mix and final pricing.
-            </p>
-            {fileName && (
-              <p className="m-0 text-[13px] text-fg-muted leading-normal">
-                Note: This is a preview estimate based on your uploaded report ({fileName}). Actual bills under usage-based billing may differ based on model mix and final pricing.
+          {!isNativeAiCredits && (
+            <div className="bg-bg-accent-muted border border-border-accent/25 rounded-md py-5 px-6 mb-5 flex flex-col gap-2">
+              <h2 className="m-0 text-base font-semibold text-fg-default">GitHub Copilot is moving to usage-based billing</h2>
+              <p className="m-0 text-sm text-fg-default leading-normal">
+                Starting June 1, 2026, Copilot usage will be measured in AI Credits (AICs) instead of Premium Requests (PRUs). <strong className="text-[15px] font-bold bg-bg-default py-[2px] px-2 rounded-[4px] whitespace-nowrap">1 AIC = $0.01.</strong> This is a preview estimate based on your uploaded report. Actual bills under usage-based billing may differ based on model mix and final pricing.
               </p>
-            )}
-            <a
-              href={usageBasedBillingDocsUrl}
-              className="text-sm font-medium text-fg-accent no-underline self-start hover:underline"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              Learn more about usage-based billing &rarr;
-            </a>
-          </div>
+              {fileName && (
+                <p className="m-0 text-[13px] text-fg-muted leading-normal">
+                  Note: This is a preview estimate based on your uploaded report ({fileName}). Actual bills under usage-based billing may differ based on model mix and final pricing.
+                </p>
+              )}
+              <a
+                href={usageBasedBillingDocsUrl}
+                className="text-sm font-medium text-fg-accent no-underline self-start hover:underline"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                Learn more about usage-based billing &rarr;
+              </a>
+            </div>
+          )}
 
-          {periodLabel && (
+          {!isNativeAiCredits && periodLabel && (
             <p className="text-base font-normal text-center mb-1 text-fg-default">
               {savings > 0 ? (
                 <>
@@ -163,11 +175,13 @@ export function OverviewView({
             licenseSeatCounts={licenseSeatCounts}
             showExistingDiscountDisclaimer={reportPlanScope !== 'individual'}
             showPromotionalDataDisclaimer={reportPlanScope === 'individual'}
+            showOrganizationPromotionalDataDisclaimer={reportPlanScope !== 'individual' && showOrganizationPromotionalDataDisclaimer}
             upgradeRecommendation={upgradeRecommendation}
             onAdjustSeatCounts={onAdjustSeatCounts}
+            reportMode={reportMode}
             className="mb-3"
           />
-          <BillingProjectionDisclaimer className="mb-6" />
+          <BillingProjectionDisclaimer className="mb-6" showDetails={!isNativeAiCredits} />
 
           <section className="grid grid-cols-1 gap-6 w-full">
             <div className="flex flex-col gap-2">
@@ -215,59 +229,63 @@ export function OverviewView({
                 {includedCreditsDescription}
               </p>
             </div>
-            <DualAxisLineChart
-              title="Daily cost: PRU cost vs AIC cost"
-              labels={filledDailyUsageData.map((day) => day.date)}
-              series={[
-                {
-                  label: 'PRU Gross Cost',
-                  color: '#cf222e',
-                  data: filledDailyUsageData.map((day) => day.grossAmount),
-                  yAxisID: 'y',
-                },
-                {
-                  label: 'AIC Gross Cost',
-                  color: '#54aeff',
-                  data: filledDailyUsageData.map((day) => day.aicGrossAmount),
-                  yAxisID: 'y',
-                },
-              ]}
-              formatYAsCurrency
-              height={320}
-            />
-            <DualAxisLineChart
-              title="Cumulative net cost: PRU vs AIC"
-              labels={filledDailyUsageData.map((day) => day.date)}
-              series={[
-                {
-                  label: 'PRU Net Cost',
-                  color: '#cf222e',
-                  data: filledDailyUsageData.reduce<number[]>((acc, day) => {
-                    acc.push((acc[acc.length - 1] ?? 0) + day.netAmount)
-                    return acc
-                  }, []),
-                  yAxisID: 'y',
-                },
-                {
-                  label: 'AIC Net Cost',
-                  color: '#54aeff',
-                  data: filledDailyUsageData.reduce<number[]>((acc, day) => {
-                    acc.push((acc[acc.length - 1] ?? 0) + day.aicNetAmount)
-                    return acc
-                  }, []),
-                  yAxisID: 'y',
-                },
-              ]}
-              formatYAsCurrency
-              height={320}
-            />
+            {!isNativeAiCredits && (
+              <>
+                <DualAxisLineChart
+                  title="Daily cost: PRU cost vs AIC cost"
+                  labels={filledDailyUsageData.map((day) => day.date)}
+                  series={[
+                    {
+                      label: 'PRU Gross Cost',
+                      color: '#cf222e',
+                      data: filledDailyUsageData.map((day) => day.grossAmount),
+                      yAxisID: 'y',
+                    },
+                    {
+                      label: 'AIC Gross Cost',
+                      color: '#54aeff',
+                      data: filledDailyUsageData.map((day) => day.aicGrossAmount),
+                      yAxisID: 'y',
+                    },
+                  ]}
+                  formatYAsCurrency
+                  height={320}
+                />
+                <DualAxisLineChart
+                  title="Cumulative net cost: PRU vs AIC"
+                  labels={filledDailyUsageData.map((day) => day.date)}
+                  series={[
+                    {
+                      label: 'PRU Net Cost',
+                      color: '#cf222e',
+                      data: filledDailyUsageData.reduce<number[]>((acc, day) => {
+                        acc.push((acc[acc.length - 1] ?? 0) + day.netAmount)
+                        return acc
+                      }, []),
+                      yAxisID: 'y',
+                    },
+                    {
+                      label: 'AIC Net Cost',
+                      color: '#54aeff',
+                      data: filledDailyUsageData.reduce<number[]>((acc, day) => {
+                        acc.push((acc[acc.length - 1] ?? 0) + day.aicNetAmount)
+                        return acc
+                      }, []),
+                      yAxisID: 'y',
+                    },
+                  ]}
+                  formatYAsCurrency
+                  height={320}
+                />
+              </>
+            )}
           </section>
 
           <div className="bg-bg-default border border-border-default rounded-md py-5 px-6 mt-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-5">
             <div className="flex-1 flex flex-col gap-1">
-              <strong className="text-sm font-semibold text-fg-default">{includedCreditsCardTitle}</strong>
+              <strong className="text-sm font-semibold text-fg-default">{isNativeAiCredits ? nativeIncludedCreditsCardTitle : includedCreditsCardTitle}</strong>
               <p className="m-0 text-[13px] text-fg-muted leading-normal">
-                {includedCreditsCardBody}
+                {isNativeAiCredits ? nativeIncludedCreditsCardBody : includedCreditsCardBody}
               </p>
             </div>
             <a

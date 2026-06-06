@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { InfoTip } from './InfoTip'
 import { th, thNum, td, tdNum } from './ui/tableStyles'
 import { formatAic, formatDifference, formatUsd } from '../utils/format'
+import { isNativeAiCreditsMode, type ReportMode } from '../utils/reportMode'
 
 export type ProductUsageTableTotals = {
   requests: number
@@ -19,6 +20,7 @@ export type ProductUsageTableProduct = {
 export type ProductUsageTableProps = {
   products: ProductUsageTableProduct[]
   title?: string
+  reportMode?: ReportMode
 }
 
 const PRODUCT_COLORS = ['#2da44e', '#8b5cf6', '#d4a72c', '#54aeff', '#cf222e', '#fd8c73', '#8b949e']
@@ -27,17 +29,20 @@ function formatInt(n: number): string {
   return n.toLocaleString(undefined, { maximumFractionDigits: 0 })
 }
 
-export function ProductUsageTable({ products, title }: ProductUsageTableProps) {
+export function ProductUsageTable({ products, title, reportMode = 'transition-period-billing-preview' }: ProductUsageTableProps) {
   const [expandedProducts, setExpandedProducts] = useState<Set<string>>(
     () => new Set(),
   )
+  const isNativeAiCredits = isNativeAiCreditsMode(reportMode)
 
   const modelRowsByProduct = useMemo(() => {
     const entries = products.map((product) => {
       const modelRows = Object.entries(product.models)
         .map(([model, totals]) => ({ model, totals }))
         .sort((a, b) => {
-          const costDiff = b.totals.netAmount - a.totals.netAmount
+          const costDiff = isNativeAiCredits
+            ? b.totals.aicNetAmount - a.totals.aicNetAmount
+            : b.totals.netAmount - a.totals.netAmount
           return costDiff !== 0 ? costDiff : a.model.localeCompare(b.model)
         })
 
@@ -45,7 +50,7 @@ export function ProductUsageTable({ products, title }: ProductUsageTableProps) {
     })
 
     return Object.fromEntries(entries)
-  }, [products])
+  }, [products, isNativeAiCredits])
 
   const toggleProduct = (product: string) => {
     setExpandedProducts((current) => {
@@ -70,11 +75,11 @@ export function ProductUsageTable({ products, title }: ProductUsageTableProps) {
         <thead>
           <tr>
             <th className={th}>Product</th>
-            <th className={thNum}>PRUs</th>
-            <th className={thNum}>PRU net cost</th>
+            {!isNativeAiCredits && <th className={thNum}>PRUs</th>}
+            {!isNativeAiCredits && <th className={thNum}>PRU net cost</th>}
             <th className={thNum}>AICs</th>
             <th className={thNum}>AIC net cost</th>
-            <th className={thNum}>Difference</th>
+            {!isNativeAiCredits && <th className={thNum}>Difference</th>}
           </tr>
         </thead>
         <tbody>
@@ -86,6 +91,7 @@ export function ProductUsageTable({ products, title }: ProductUsageTableProps) {
               isExpanded={expandedProducts.has(product.product)}
               modelRows={modelRowsByProduct[product.product] ?? []}
               onToggle={toggleProduct}
+              isNativeAiCredits={isNativeAiCredits}
             />
           ))}
         </tbody>
@@ -100,9 +106,10 @@ type ProductRowsProps = {
   isExpanded: boolean
   modelRows: Array<{ model: string; totals: ProductUsageTableTotals }>
   onToggle: (product: string) => void
+  isNativeAiCredits: boolean
 }
 
-function ProductRows({ product, productIndex, isExpanded, modelRows, onToggle }: ProductRowsProps) {
+function ProductRows({ product, productIndex, isExpanded, modelRows, onToggle, isNativeAiCredits }: ProductRowsProps) {
   const color = PRODUCT_COLORS[productIndex % PRODUCT_COLORS.length]
   const productDiff = product.totals.netAmount - product.totals.aicNetAmount
 
@@ -131,15 +138,17 @@ function ProductRows({ product, productIndex, isExpanded, modelRows, onToggle }:
             )}
           </span>
         </td>
-        <td className={tdNum}>{formatInt(product.totals.requests)}</td>
-        <td className={tdNum}>{formatUsd(product.totals.netAmount)}</td>
+        {!isNativeAiCredits && <td className={tdNum}>{formatInt(product.totals.requests)}</td>}
+        {!isNativeAiCredits && <td className={tdNum}>{formatUsd(product.totals.netAmount)}</td>}
         <td className={tdNum}>{formatAic(product.totals.aicQuantity)}</td>
         <td className={tdNum}>{formatUsd(product.totals.aicNetAmount)}</td>
-        <td
-          className={`${tdNum} font-semibold ${productDiff > 0 ? 'text-app-savings-fg' : productDiff < 0 ? 'text-fg-danger' : 'text-fg-muted'}`}
-        >
-          {formatDifference(productDiff)}
-        </td>
+        {!isNativeAiCredits && (
+          <td
+            className={`${tdNum} font-semibold ${productDiff > 0 ? 'text-app-savings-fg' : productDiff < 0 ? 'text-fg-danger' : 'text-fg-muted'}`}
+          >
+            {formatDifference(productDiff)}
+          </td>
+        )}
       </tr>
 
       {isExpanded &&
@@ -149,15 +158,17 @@ function ProductRows({ product, productIndex, isExpanded, modelRows, onToggle }:
           return (
             <tr key={`${product.product}-${row.model}`} className="[&_td]:bg-bg-default">
               <td className="pl-11 pr-4 py-3 border-b border-bg-muted whitespace-nowrap text-xs text-fg-muted">{row.model}</td>
-              <td className={`${tdNum} text-fg-muted`}>{formatInt(row.totals.requests)}</td>
-              <td className={`${tdNum} text-fg-muted`}>{formatUsd(row.totals.netAmount)}</td>
+              {!isNativeAiCredits && <td className={`${tdNum} text-fg-muted`}>{formatInt(row.totals.requests)}</td>}
+              {!isNativeAiCredits && <td className={`${tdNum} text-fg-muted`}>{formatUsd(row.totals.netAmount)}</td>}
               <td className={`${tdNum} text-fg-muted`}>{formatAic(row.totals.aicQuantity)}</td>
               <td className={`${tdNum} text-fg-muted`}>{formatUsd(row.totals.aicNetAmount)}</td>
-              <td
-                className={`${tdNum} font-semibold ${modelDiff > 0 ? 'text-app-savings-fg' : modelDiff < 0 ? 'text-fg-danger' : 'text-fg-muted'}`}
-              >
-                {formatDifference(modelDiff)}
-              </td>
+              {!isNativeAiCredits && (
+                <td
+                  className={`${tdNum} font-semibold ${modelDiff > 0 ? 'text-app-savings-fg' : modelDiff < 0 ? 'text-fg-danger' : 'text-fg-muted'}`}
+                >
+                  {formatDifference(modelDiff)}
+                </td>
+              )}
             </tr>
           )
         })}

@@ -2,16 +2,19 @@ import type { ProductUsageResult } from '../pipeline/aggregators/productUsageAgg
 import { ProductUsageTable } from '../components'
 import { InfoTip } from '../components/InfoTip'
 import { formatUsd } from '../utils/format'
+import { isNativeAiCreditsMode, type ReportMode } from '../utils/reportMode'
 
 const PRODUCT_COLORS = ['#2da44e', '#8b5cf6', '#d4a72c', '#54aeff', '#cf222e', '#fd8c73', '#8b949e']
 
 type ProductsViewProps = {
   data: ProductUsageResult
+  reportMode?: ReportMode
 }
 
-export function ProductsView({ data }: ProductsViewProps) {
+export function ProductsView({ data, reportMode = 'transition-period-billing-preview' }: ProductsViewProps) {
+  const isNativeAiCredits = isNativeAiCreditsMode(reportMode)
   const maxCost = data.products.reduce((value, product) => {
-    return Math.max(value, product.totals.netAmount, product.totals.aicNetAmount)
+    return Math.max(value, isNativeAiCredits ? 0 : product.totals.netAmount, product.totals.aicNetAmount)
   }, 0)
 
   if (data.products.length === 0) {
@@ -30,15 +33,17 @@ export function ProductsView({ data }: ProductsViewProps) {
           <h2 className="m-0 text-lg text-fg-default">Usage by product</h2>
           <span className="text-[13px] text-fg-muted">{data.products.length.toLocaleString()} total</span>
         </div>
-        <div className="text-[13px] text-fg-muted">PRU = $0.04/request · AIC = $0.01/unit</div>
+        <div className="text-[13px] text-fg-muted">{isNativeAiCredits ? 'AIC = $0.01/unit' : 'PRU = $0.04/request · AIC = $0.01/unit'}</div>
       </div>
 
       <div className="bg-bg-default border border-border-default rounded-md flex flex-col gap-5 p-5">
         <div className="flex flex-wrap gap-3.5 text-[11px] text-fg-muted" aria-hidden="true">
-          <span className="inline-flex items-center gap-[5px]">
-            <span className="w-2.5 h-2.5 rounded-sm shrink-0 bg-[rgba(207,34,46,0.7)]" />
-            PRU net cost
-          </span>
+          {!isNativeAiCredits && (
+            <span className="inline-flex items-center gap-[5px]">
+              <span className="w-2.5 h-2.5 rounded-sm shrink-0 bg-[rgba(207,34,46,0.7)]" />
+              PRU net cost
+            </span>
+          )}
           <span className="inline-flex items-center gap-[5px]">
             <span className="w-2.5 h-2.5 rounded-sm shrink-0 bg-fg-accent" />
             AIC net cost
@@ -70,12 +75,14 @@ export function ProductsView({ data }: ProductsViewProps) {
                 </div>
 
                 <div className="flex flex-col gap-2 min-w-0">
-                  <div className="flex items-center gap-2 min-w-0">
-                    <div className="flex-1 h-3.5 rounded-[4px] overflow-hidden bg-bg-muted">
-                      <div className="h-full rounded-[4px] min-w-0 bg-[rgba(207,34,46,0.7)]" style={{ width: `${pruWidth}%` }} />
+                  {!isNativeAiCredits && (
+                    <div className="flex items-center gap-2 min-w-0">
+                      <div className="flex-1 h-3.5 rounded-[4px] overflow-hidden bg-bg-muted">
+                        <div className="h-full rounded-[4px] min-w-0 bg-[rgba(207,34,46,0.7)]" style={{ width: `${pruWidth}%` }} />
+                      </div>
+                      <span className="min-w-[72px] text-[10px] font-medium tabular-nums whitespace-nowrap text-fg-danger">{formatUsd(product.totals.netAmount)}</span>
                     </div>
-                    <span className="min-w-[72px] text-[10px] font-medium tabular-nums whitespace-nowrap text-fg-danger">{formatUsd(product.totals.netAmount)}</span>
-                  </div>
+                  )}
 
                   <div className="flex items-center gap-2 min-w-0">
                     <div className="flex-1 h-3.5 rounded-[4px] overflow-hidden bg-bg-muted">
@@ -90,7 +97,7 @@ export function ProductsView({ data }: ProductsViewProps) {
         </div>
       </div>
 
-      <ProductUsageTable products={data.products} />
+      <ProductUsageTable products={data.products} reportMode={reportMode} />
     </section>
   )
 }

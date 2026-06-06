@@ -8,6 +8,7 @@ import type { BudgetField, BudgetValues } from '../utils/costManagementBudgets'
 import type { DailyUsageData } from '../pipeline/aggregators/dailyUsageAggregator'
 import { formatAic, formatUsd } from '../utils/format'
 import type { IndividualPlanUpgradeRecommendation } from '../utils/individualPlanUpgrade'
+import { isNativeAiCreditsMode, type ReportMode } from '../utils/reportMode'
 import { th, thNum, td, tdNum } from '../components/ui/tableStyles'
 
 type CostManagementViewProps = {
@@ -34,6 +35,8 @@ type CostManagementViewProps = {
   isApplyingBudgetSimulation: boolean
   onBudgetValueChange: (field: BudgetField, value: string) => void
   onApplyBudgetSimulation: () => void
+  reportMode?: ReportMode
+  showOrganizationPromotionalDataDisclaimer?: boolean
 }
 
 const ACCOUNT_BUDGET_FIELD: { field: BudgetField; label: string; description: string } = {
@@ -146,7 +149,10 @@ export function CostManagementView({
   isApplyingBudgetSimulation,
   onBudgetValueChange,
   onApplyBudgetSimulation,
+  reportMode = 'transition-period-billing-preview',
+  showOrganizationPromotionalDataDisclaimer = true,
 }: CostManagementViewProps) {
+  const isNativeAiCredits = isNativeAiCreditsMode(reportMode)
   const visibleAccountBudgetFields = isIndividualReport ? INDIVIDUAL_BUDGET_FIELDS : [ACCOUNT_BUDGET_FIELD]
   const hasVisibleBudgetValue = visibleAccountBudgetFields.some(({ field }) => budgetValues[field].trim() !== '')
     || (!isIndividualReport && USER_BUDGET_FIELDS.some(({ field }) => budgetValues[field].trim() !== ''))
@@ -213,6 +219,39 @@ export function CostManagementView({
     licenseAmount,
   ])
 
+  if (isNativeAiCredits) {
+    return (
+      <section className="flex flex-col gap-6" aria-label="Cost management">
+        <div className="flex flex-col gap-1">
+          <h2 className="m-0 text-lg text-fg-default">Cost management</h2>
+          <p className="m-0 text-[13px] text-fg-muted">Budget simulation is not available for usage-based billing reports yet.</p>
+        </div>
+
+        <BillingTotalsCards
+          pruNetAmount={currentPruBill}
+          pruGrossAmount={currentPruGrossAmount}
+          pruDiscountAmount={currentPruDiscountAmount}
+          pruQuantity={currentPruQuantity}
+          aicNetAmount={currentAicBill}
+          aicGrossAmount={currentAicGrossAmount}
+          aicDiscountAmount={currentAicDiscountAmount}
+          aicQuantity={currentAicQuantity}
+          licenseAmount={licenseAmount}
+          licenseSeatCounts={licenseSeatCounts}
+          showExistingDiscountDisclaimer={!isIndividualReport}
+          showPromotionalDataDisclaimer={isIndividualReport}
+          showOrganizationPromotionalDataDisclaimer={!isIndividualReport && showOrganizationPromotionalDataDisclaimer}
+          upgradeRecommendation={upgradeRecommendation}
+          reportMode={reportMode}
+        />
+
+        <div className="bg-bg-default border border-border-default rounded-md px-5 py-5 text-sm text-fg-muted leading-normal">
+          Usage-based billing reports already contain AI Credits quantities and costs. Budget controls will be enabled after the simulator can process usage-based billing rows directly.
+        </div>
+      </section>
+    )
+  }
+
   return (
     <section className="flex flex-col gap-6" aria-label="Cost management">
       <div className="flex flex-col gap-1">
@@ -233,7 +272,9 @@ export function CostManagementView({
         licenseSeatCounts={licenseSeatCounts}
         showExistingDiscountDisclaimer={!isIndividualReport}
         showPromotionalDataDisclaimer={isIndividualReport}
+        showOrganizationPromotionalDataDisclaimer={!isIndividualReport && showOrganizationPromotionalDataDisclaimer}
         upgradeRecommendation={upgradeRecommendation}
+        reportMode={reportMode}
       />
 
       <div className="grid grid-cols-1 gap-4">
