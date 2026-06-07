@@ -135,6 +135,12 @@ describe('usage report adapters', () => {
     expect(() => validateUsageReportFirstRecord(header, record)).not.toThrow()
   })
 
+  it('uses the native adapter for header-only reports without exceeds_quota', () => {
+    const header = parseTokenUsageHeader(HEADER_WITHOUT_EXCEEDS_QUOTA)
+
+    expect(validateUsageReportHeader(header).metadata.format).toBe('native-ai-credits')
+  })
+
   it('normalizes transition-period rows through the adapter parser', () => {
     const header = parseTokenUsageHeader(TRANSITION_PERIOD_HEADER)
     const adapter = validateUsageReportHeader(header)

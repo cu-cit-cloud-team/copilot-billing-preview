@@ -52,10 +52,6 @@ const REPORT_ADAPTERS: Record<ReportFormat, UsageReportAdapter> = {
   'native-ai-credits': NATIVE_AI_CREDITS_REPORT_ADAPTER,
 }
 
-function hasTransitionPeriodAicColumns(header: TokenUsageHeader): boolean {
-  return 'aic_quantity' in header.index && 'aic_gross_amount' in header.index
-}
-
 export function getDefaultUsageReportAdapter(): UsageReportAdapter {
   return TRANSITION_PERIOD_BILLING_PREVIEW_REPORT_ADAPTER
 }
@@ -63,7 +59,7 @@ export function getDefaultUsageReportAdapter(): UsageReportAdapter {
 export function validateUsageReportHeader(header: TokenUsageHeader): UsageReportAdapter {
   validateBaseHeader(header)
 
-  if (!('exceeds_quota' in header.index) && !hasTransitionPeriodAicColumns(header)) {
+  if (!('exceeds_quota' in header.index)) {
     NATIVE_AI_CREDITS_REPORT_ADAPTER.validateHeader(header)
     return NATIVE_AI_CREDITS_REPORT_ADAPTER
   }

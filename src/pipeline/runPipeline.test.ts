@@ -123,6 +123,17 @@ describe('runPipeline', () => {
     expect(aggregator.result()).toEqual([])
   })
 
+  it('returns native metadata for a valid native header-only report', async () => {
+    const aggregator = new CaptureAggregator()
+
+    await expect(runPipeline(createCsv([], NATIVE_AI_CREDITS_HEADER), [aggregator])).resolves.toEqual({
+      reportMetadata: NATIVE_AI_CREDITS_REPORT_METADATA,
+      reportRowCount: 0,
+      processedRowCount: 0,
+    })
+    expect(aggregator.result()).toEqual([])
+  })
+
   it('rejects a malformed header-only report', async () => {
     const aggregator = new CaptureAggregator()
 
