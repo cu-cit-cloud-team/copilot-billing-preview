@@ -73,7 +73,6 @@ const NATIVE_AI_CREDITS_HEADER = [
 const NATIVE_AI_CREDITS_REPORT_METADATA = {
   format: 'native-ai-credits',
   label: 'Native AI Credits report',
-  supported: false,
 } as const
 const UNKNOWN_HIGH_MONTHLY_QUOTA = 2147483647
 

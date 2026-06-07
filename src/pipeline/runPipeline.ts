@@ -12,11 +12,10 @@ import {
   validateUsageReportHeader,
   type ReportFormatMetadata,
   type UsageReportAdapter,
-  type UsageReportValidationOptions,
 } from './reportAdapters'
 import { streamLines, type StreamProgress } from './streamer'
 
-async function validateFileFormat(file: File, options?: UsageReportValidationOptions): Promise<UsageReportAdapter> {
+async function validateFileFormat(file: File): Promise<UsageReportAdapter> {
   let header: TokenUsageHeader | null = null
   let selectedAdapter: UsageReportAdapter | null = null
 
@@ -32,7 +31,7 @@ async function validateFileFormat(file: File, options?: UsageReportValidationOpt
       continue
     }
 
-    return validateUsageReportFirstRecord(header, parseTokenUsageRecord(trimmed, header), options)
+    return validateUsageReportFirstRecord(header, parseTokenUsageRecord(trimmed, header))
   }
 
   if (!selectedAdapter) {
@@ -51,7 +50,6 @@ export interface PipelineProgress {
 }
 
 export interface PipelineOptions {
-  enableNativeAiCreditsProcessing?: boolean
   includedCreditsOverrides?: AicIncludedCreditsOverrides
   progressResolution?: number
   onProgress?: (progress: PipelineProgress) => void
@@ -96,14 +94,11 @@ export async function runPipeline(
   options?: PipelineOptions,
 ): Promise<PipelineResult> {
   const {
-    enableNativeAiCreditsProcessing = false,
     includedCreditsOverrides = {},
     progressResolution = 500,
     onProgress,
   } = options ?? {}
-  const reportAdapter = await validateFileFormat(file, {
-    allowUnsupportedNativeAiCredits: enableNativeAiCreditsProcessing,
-  })
+  const reportAdapter = await validateFileFormat(file)
   const reportMetadata = reportAdapter.metadata
   const aggregators = typeof aggregatorsOrFactory === 'function'
     ? aggregatorsOrFactory(reportMetadata)

@@ -5,8 +5,7 @@ import { DailyUsageAggregator } from './aggregators/dailyUsageAggregator'
 import { UserUsageAggregator } from './aggregators/userUsageAggregator'
 import {
   InvalidReportError,
-  UnsupportedNativeAiCreditsReportError,
-  UnsupportedReportVersionError,
+  PreAiCreditsReportVersionError,
   type TokenUsageHeader,
   type TokenUsageRecord,
 } from './parser'
@@ -71,13 +70,11 @@ const NATIVE_AI_CREDITS_HEADER_WITHOUT_ALIASES = [
 const TRANSITION_PERIOD_REPORT_METADATA = {
   format: 'transition-period-billing-preview',
   label: 'Transition Period Billing Preview report',
-  supported: true,
 }
 
 const NATIVE_AI_CREDITS_REPORT_METADATA = {
   format: 'native-ai-credits',
   label: 'Native AI Credits report',
-  supported: false,
 } as const
 
 function createCsv(rows: string[][], header = HEADER): File {
@@ -126,6 +123,17 @@ describe('runPipeline', () => {
     expect(aggregator.result()).toEqual([])
   })
 
+  it('returns native metadata for a valid native header-only report', async () => {
+    const aggregator = new CaptureAggregator()
+
+    await expect(runPipeline(createCsv([], NATIVE_AI_CREDITS_HEADER), [aggregator])).resolves.toEqual({
+      reportMetadata: NATIVE_AI_CREDITS_REPORT_METADATA,
+      reportRowCount: 0,
+      processedRowCount: 0,
+    })
+    expect(aggregator.result()).toEqual([])
+  })
+
   it('rejects a malformed header-only report', async () => {
     const aggregator = new CaptureAggregator()
 
@@ -153,39 +161,11 @@ describe('runPipeline', () => {
     ].join(',')
     const aggregator = new CaptureAggregator()
 
-    await expect(runPipeline(createCsv([], header), [aggregator])).rejects.toThrow(UnsupportedReportVersionError)
+    await expect(runPipeline(createCsv([], header), [aggregator])).rejects.toThrow(PreAiCreditsReportVersionError)
     expect(aggregator.result()).toEqual([])
   })
 
-  it('rejects native AI Credits reports before aggregator calls', async () => {
-    const file = createCsv([
-      [
-        '5/29/26',
-        'mona',
-        'copilot',
-        'copilot_ai_credit',
-        'Auto: Claude Haiku 4.5',
-        '96.9990345',
-        'ai-credits',
-        '0.01',
-        '0.969990345',
-        '0',
-        '0.969990345',
-        '3900',
-        'example-org',
-        '',
-        '96.9990345',
-        '0.969990345',
-      ],
-    ], NATIVE_AI_CREDITS_HEADER)
-    const aggregator = new CaptureAggregator()
-
-    await expect(runPipeline(file, [aggregator])).rejects.toThrow(UnsupportedNativeAiCreditsReportError)
-    expect(aggregator.headerCalls()).toBe(0)
-    expect(aggregator.result()).toEqual([])
-  })
-
-  it('processes native AI Credits reports with native metadata when explicitly enabled', async () => {
+  it('processes native AI Credits reports with native metadata', async () => {
     const file = createCsv([
       [
         '5/29/26',
@@ -208,9 +188,7 @@ describe('runPipeline', () => {
     ], NATIVE_AI_CREDITS_HEADER)
     const aggregator = new CaptureAggregator()
 
-    const result = await runPipeline(file, [aggregator], {
-      enableNativeAiCreditsProcessing: true,
-    })
+    const result = await runPipeline(file, [aggregator])
 
     expect(result).toEqual({
       reportMetadata: NATIVE_AI_CREDITS_REPORT_METADATA,
@@ -275,9 +253,7 @@ describe('runPipeline', () => {
     const daily = new DailyUsageAggregator(NATIVE_AI_CREDITS_REPORT_METADATA)
     const users = new UserUsageAggregator(NATIVE_AI_CREDITS_REPORT_METADATA)
 
-    await runPipeline(file, [daily, users], {
-      enableNativeAiCreditsProcessing: true,
-    })
+    await runPipeline(file, [daily, users])
 
     expect(daily.result().dailyData).toEqual([
       expect.objectContaining({
@@ -363,8 +339,6 @@ describe('runPipeline', () => {
     await runPipeline(file, (reportMetadata) => {
       daily = new DailyUsageAggregator(reportMetadata)
       return [daily]
-    }, {
-      enableNativeAiCreditsProcessing: true,
     })
 
     expect(daily.result().dailyData).toEqual([
@@ -431,8 +405,6 @@ describe('runPipeline', () => {
     const result = await runPipeline(file, (reportMetadata) => {
       daily = new DailyUsageAggregator(reportMetadata)
       return [daily]
-    }, {
-      enableNativeAiCreditsProcessing: true,
     })
 
     expect(result.reportMetadata).toEqual(NATIVE_AI_CREDITS_REPORT_METADATA)
@@ -480,8 +452,6 @@ describe('runPipeline', () => {
       factoryMetadata = reportMetadata
       daily = new DailyUsageAggregator(reportMetadata)
       return [daily]
-    }, {
-      enableNativeAiCreditsProcessing: true,
     })
 
     expect(factoryMetadata).toEqual(NATIVE_AI_CREDITS_REPORT_METADATA)
@@ -524,12 +494,8 @@ describe('runPipeline', () => {
     const summerAggregator = new CaptureAggregator()
     const septemberAggregator = new CaptureAggregator()
 
-    await runPipeline(createNativePolicyCsv('8/31/26'), [summerAggregator], {
-      enableNativeAiCreditsProcessing: true,
-    })
-    await runPipeline(createNativePolicyCsv('9/1/26'), [septemberAggregator], {
-      enableNativeAiCreditsProcessing: true,
-    })
+    await runPipeline(createNativePolicyCsv('8/31/26'), [summerAggregator])
+    await runPipeline(createNativePolicyCsv('9/1/26'), [septemberAggregator])
 
     expect(summerAggregator.result()[0]).toEqual(expect.objectContaining({
       date: '2026-08-31',
@@ -541,7 +507,7 @@ describe('runPipeline', () => {
     expect(septemberAggregator.result()[0].aic_net_amount).toBeCloseTo(11)
   })
 
-  it('returns transition-period metadata while processing supported reports', async () => {
+  it('returns transition-period metadata while processing transition-period reports', async () => {
     const file = createCsv([
       ['2026-04-25', 'mona', 'copilot', 'copilot_premium_request', 'GPT-5', '0', 'requests', '0.04', '0', '0', '0', 'False', '300', '', '', '0', '0'],
       ['2026-04-25', 'mona', 'copilot', 'copilot_premium_request', 'GPT-5', '10', 'requests', '0.04', '0.40', '0', '0.40', 'False', '0', '', '', '100', '1.00'],
@@ -567,7 +533,7 @@ describe('runPipeline', () => {
     })
   })
 
-  it('keeps transition-period allocation for supported reports after the native policy boundary', async () => {
+  it('keeps transition-period allocation for transition-period reports after the native policy boundary', async () => {
     const file = createCsv([
       ['2026-09-01', 'mona', 'copilot', 'copilot_ai_credit', 'GPT-5', '3000', 'ai-credits', '0.01', '30.00', '0', '30.00', 'False', '300', 'example-org', 'Cost Center A', '3000', '30.00'],
     ])

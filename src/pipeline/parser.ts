@@ -130,24 +130,13 @@ export class InvalidReportError extends Error {
   }
 }
 
-export class UnsupportedReportVersionError extends Error {
+export class PreAiCreditsReportVersionError extends Error {
   constructor() {
     super(
       `This report was exported before usage-based billing was introduced and cannot be displayed. ` +
         `Please upload a more recent report that includes the AI Credits columns.`,
     )
-    this.name = 'UnsupportedReportVersionError'
-  }
-}
-
-export class UnsupportedNativeAiCreditsReportError extends Error {
-  constructor() {
-    super(
-      `This billing preview app currently supports PRU vs usage-based billing reports generated for ` +
-        `the April and May billing periods. Reports generated on or after June 1 use AI Credits as ` +
-        `the primary unit and are not supported yet.`,
-    )
-    this.name = 'UnsupportedNativeAiCreditsReportError'
+    this.name = 'PreAiCreditsReportVersionError'
   }
 }
 
@@ -162,7 +151,7 @@ export function validateHeader(header: TokenUsageHeader): void {
   validateBaseHeader(header)
   const missingAic = REQUIRED_AIC_COLUMNS.filter((col) => !(col in header.index))
   if (missingAic.length > 0) {
-    throw new UnsupportedReportVersionError()
+    throw new PreAiCreditsReportVersionError()
   }
 }
 
@@ -171,12 +160,6 @@ export function hasNativeAiCreditsReportSignature(header: TokenUsageHeader, reco
   const usesNativeAiCreditsUnit = record.unit_type === 'ai-credits' && record.sku.endsWith('_ai_credit')
 
   return lacksExceedsQuota && usesNativeAiCreditsUnit
-}
-
-export function validateSupportedReportRecord(header: TokenUsageHeader, record: TokenUsageRecord): void {
-  if (hasNativeAiCreditsReportSignature(header, record)) {
-    throw new UnsupportedNativeAiCreditsReportError()
-  }
 }
 
 function stripBom(s: string): string {

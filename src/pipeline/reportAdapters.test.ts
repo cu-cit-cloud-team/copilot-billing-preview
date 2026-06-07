@@ -2,8 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import {
   InvalidReportError,
-  UnsupportedNativeAiCreditsReportError,
-  UnsupportedReportVersionError,
+  PreAiCreditsReportVersionError,
   parseTokenUsageHeader,
   parseTokenUsageRecord,
 } from './parser'
@@ -103,7 +102,6 @@ describe('usage report adapters', () => {
     expect(detectReportFormat(header, record)).toBe('transition-period-billing-preview')
     expect(selectUsageReportAdapter(header, record).metadata).toMatchObject({
       format: 'transition-period-billing-preview',
-      supported: true,
     })
     expect(() => validateUsageReportFirstRecord(header, record)).not.toThrow()
   })
@@ -135,6 +133,12 @@ describe('usage report adapters', () => {
     expect(detectReportFormat(header, record)).toBe('transition-period-billing-preview')
     expect(selectUsageReportAdapter(header, record).metadata.format).toBe('transition-period-billing-preview')
     expect(() => validateUsageReportFirstRecord(header, record)).not.toThrow()
+  })
+
+  it('uses the native adapter for header-only reports without exceeds_quota', () => {
+    const header = parseTokenUsageHeader(HEADER_WITHOUT_EXCEEDS_QUOTA)
+
+    expect(validateUsageReportHeader(header).metadata.format).toBe('native-ai-credits')
   })
 
   it('normalizes transition-period rows through the adapter parser', () => {
@@ -196,7 +200,7 @@ describe('usage report adapters', () => {
     })
   })
 
-  it('detects native AI Credits reports and routes them to an unsupported adapter', () => {
+  it('detects native AI Credits reports and routes them to the native adapter', () => {
     const header = parseTokenUsageHeader(HEADER_WITHOUT_EXCEEDS_QUOTA)
     const row = buildRow([
       '2026-06-01',
@@ -226,11 +230,9 @@ describe('usage report adapters', () => {
     expect(detectReportFormat(header, record)).toBe('native-ai-credits')
     expect(adapter.metadata).toMatchObject({
       format: 'native-ai-credits',
-      supported: false,
     })
 
-    expect(() => adapter.validateFirstRecord(header, record)).toThrow(UnsupportedNativeAiCreditsReportError)
-    expect(() => validateUsageReportFirstRecord(header, record)).toThrow(UnsupportedNativeAiCreditsReportError)
+    expect(() => validateUsageReportFirstRecord(header, record)).not.toThrow()
     expect(adapter.parseRecord(row, header)).toMatchObject({
       date: '2026-06-01',
       quantity: 96.9990345,
@@ -267,7 +269,7 @@ describe('usage report adapters', () => {
     expect(() => validateUsageReportHeader(header)).not.toThrow()
     expect(detectReportFormat(header, record)).toBe('native-ai-credits')
     expect(adapter.metadata.format).toBe('native-ai-credits')
-    expect(() => validateUsageReportFirstRecord(header, record, { allowUnsupportedNativeAiCredits: true })).not.toThrow()
+    expect(() => validateUsageReportFirstRecord(header, record)).not.toThrow()
     expect(adapter.parseRecord(row, header)).toMatchObject({
       date: '2026-06-01',
       quantity: 42.726213,
@@ -280,7 +282,7 @@ describe('usage report adapters', () => {
     })
   })
 
-  it('normalizes native AI Credits dates through the unsupported adapter parser hook', () => {
+  it('normalizes native AI Credits dates through the native adapter parser hook', () => {
     const header = parseTokenUsageHeader(HEADER_WITHOUT_EXCEEDS_QUOTA)
     const row = buildRow([
       '2026-06-01',
@@ -331,6 +333,6 @@ describe('usage report adapters', () => {
       'cost_center_name',
     ].join(','))
 
-    expect(() => validateUsageReportHeader(header)).toThrow(UnsupportedReportVersionError)
+    expect(() => validateUsageReportHeader(header)).toThrow(PreAiCreditsReportVersionError)
   })
 })

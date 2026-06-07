@@ -11,13 +11,11 @@ import {
 const TRANSITION_PERIOD_REPORT_METADATA = {
   format: 'transition-period-billing-preview',
   label: 'Transition Period Billing Preview report',
-  supported: true,
 } satisfies ReportFormatMetadata
 
 const NATIVE_AI_CREDITS_REPORT_METADATA = {
   format: 'native-ai-credits',
   label: 'Native AI Credits report',
-  supported: false,
 } satisfies ReportFormatMetadata
 
 describe('resolveIncludedCreditsPolicy', () => {
