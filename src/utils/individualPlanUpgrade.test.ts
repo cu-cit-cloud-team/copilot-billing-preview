@@ -2,6 +2,10 @@ import { describe, expect, it } from 'vitest'
 
 import { PRO_MONTHLY_QUOTA, PRO_PLUS_MONTHLY_QUOTA } from '../pipeline/aicIncludedCredits'
 import {
+  NATIVE_AI_CREDITS_STANDARD_INCLUDED_CREDITS_POLICY,
+  NATIVE_AI_CREDITS_SUMMER_PROMO_INCLUDED_CREDITS_POLICY,
+} from '../pipeline/includedCreditsPolicy'
+import {
   calculateIndividualPlanUpgradeRecommendation,
   getIndividualLicenseMonthlyCost,
   MAX_LICENSE_MONTHLY_COST,
@@ -14,6 +18,26 @@ describe('individual plan upgrade recommendations', () => {
     expect(getIndividualLicenseMonthlyCost(PRO_MONTHLY_QUOTA)).toBe(PRO_LICENSE_MONTHLY_COST)
     expect(getIndividualLicenseMonthlyCost(PRO_PLUS_MONTHLY_QUOTA)).toBe(PRO_PLUS_LICENSE_MONTHLY_COST)
     expect(getIndividualLicenseMonthlyCost(0)).toBeUndefined()
+  })
+
+  it('returns native summer individual plan license costs', () => {
+    expect(getIndividualLicenseMonthlyCost(
+      1500,
+      NATIVE_AI_CREDITS_SUMMER_PROMO_INCLUDED_CREDITS_POLICY,
+    )).toBe(PRO_LICENSE_MONTHLY_COST)
+    expect(getIndividualLicenseMonthlyCost(
+      7000,
+      NATIVE_AI_CREDITS_SUMMER_PROMO_INCLUDED_CREDITS_POLICY,
+    )).toBe(PRO_PLUS_LICENSE_MONTHLY_COST)
+    expect(getIndividualLicenseMonthlyCost(
+      20000,
+      NATIVE_AI_CREDITS_SUMMER_PROMO_INCLUDED_CREDITS_POLICY,
+    )).toBe(MAX_LICENSE_MONTHLY_COST)
+    expect(getIndividualLicenseMonthlyCost(
+      20000,
+      NATIVE_AI_CREDITS_STANDARD_INCLUDED_CREDITS_POLICY,
+    )).toBe(MAX_LICENSE_MONTHLY_COST)
+    expect(getIndividualLicenseMonthlyCost(1000)).toBeUndefined()
   })
 
   it('recommends Pro+ when extra included AICs exceed the higher subscription cost', () => {
@@ -94,6 +118,43 @@ describe('individual plan upgrade recommendations', () => {
     expect(calculateIndividualPlanUpgradeRecommendation({
       totalMonthlyQuota: PRO_PLUS_MONTHLY_QUOTA,
       currentMonthlyAicAdditionalUsageBillsUsd: [61],
+    })).toBeNull()
+  })
+
+  it('does not recommend an upgrade for native summer Max users', () => {
+    expect(calculateIndividualPlanUpgradeRecommendation({
+      totalMonthlyQuota: 20000,
+      currentMonthlyAicAdditionalUsageBillsUsd: [200],
+      includedCreditsPolicy: NATIVE_AI_CREDITS_SUMMER_PROMO_INCLUDED_CREDITS_POLICY,
+    })).toBeNull()
+  })
+
+  it('uses post-preview individual allotments for native upgrade recommendations', () => {
+    const recommendation = calculateIndividualPlanUpgradeRecommendation({
+      totalMonthlyQuota: 7000,
+      currentMonthlyAicAdditionalUsageBillsUsd: [100],
+      includedCreditsPolicy: NATIVE_AI_CREDITS_SUMMER_PROMO_INCLUDED_CREDITS_POLICY,
+    })
+
+    expect(recommendation).toEqual({
+      currentPlanLabel: 'Pro+',
+      nextPlanTier: 'max',
+      nextPlanLabel: 'Max',
+      currentAdditionalUsageAic: 10000,
+      currentAdditionalUsageCostUsd: 100,
+      extraIncludedAic: 13000,
+      additionalUsageBillReductionUsd: 100,
+      licenseCostIncreaseUsd: 61,
+      netSavingsUsd: 39,
+      upgradedTotalBillUsd: MAX_LICENSE_MONTHLY_COST,
+    })
+  })
+
+  it('uses post-preview individual allotments for native standard upgrade recommendations', () => {
+    expect(calculateIndividualPlanUpgradeRecommendation({
+      totalMonthlyQuota: 7000,
+      currentMonthlyAicAdditionalUsageBillsUsd: [61],
+      includedCreditsPolicy: NATIVE_AI_CREDITS_STANDARD_INCLUDED_CREDITS_POLICY,
     })).toBeNull()
   })
 })

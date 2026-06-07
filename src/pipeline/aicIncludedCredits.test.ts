@@ -25,6 +25,7 @@ import {
   NATIVE_AI_CREDITS_STANDARD_INCLUDED_CREDITS_POLICY,
   NATIVE_AI_CREDITS_SUMMER_PROMO_INCLUDED_CREDITS_POLICY,
   TRANSITION_PERIOD_INCLUDED_CREDITS_POLICY,
+  type IncludedCreditsPolicy,
 } from './includedCreditsPolicy'
 import { CostCenterAggregator } from './aggregators/costCenterAggregator'
 import { OrganizationAggregator } from './aggregators/organizationAggregator'
@@ -177,6 +178,23 @@ describe('AIC included credit tiering and pool sizing', () => {
     expect(TRANSITION_PERIOD_INCLUDED_CREDITS_POLICY.organizationPlans.enterprise.monthlyIncludedCredits).toBe(
       ENTERPRISE_MONTHLY_AIC_INCLUDED_CREDITS,
     )
+    expect(TRANSITION_PERIOD_INCLUDED_CREDITS_POLICY.individualPlans['pro-student']?.identity).toEqual({
+      tier: 'pro-student',
+      quotaUnit: 'pru',
+      monthlyQuota: PRO_MONTHLY_QUOTA,
+    })
+    expect(TRANSITION_PERIOD_INCLUDED_CREDITS_POLICY.individualPlans['pro-student']?.monthlyIncludedCredits).toBe(
+      PRO_MONTHLY_AIC_INCLUDED_CREDITS,
+    )
+    expect(TRANSITION_PERIOD_INCLUDED_CREDITS_POLICY.individualPlans['pro-plus']?.identity).toEqual({
+      tier: 'pro-plus',
+      quotaUnit: 'pru',
+      monthlyQuota: PRO_PLUS_MONTHLY_QUOTA,
+    })
+    expect(TRANSITION_PERIOD_INCLUDED_CREDITS_POLICY.individualPlans['pro-plus']?.monthlyIncludedCredits).toBe(
+      PRO_PLUS_MONTHLY_AIC_INCLUDED_CREDITS,
+    )
+    expect('max' in TRANSITION_PERIOD_INCLUDED_CREDITS_POLICY.individualPlans).toBe(false)
   })
 
   it('keeps native AI Credits policies available without changing default transition-period tiering', () => {
@@ -219,6 +237,72 @@ describe('AIC included credit tiering and pool sizing', () => {
     )
     expect(getPlanLabel(1234, 'organization', NATIVE_AI_CREDITS_SUMMER_PROMO_INCLUDED_CREDITS_POLICY)).toBe(
       'Unknown (1,234 AI Credits/month)',
+    )
+  })
+
+  it('classifies post-preview individual quota identities by individual scope', () => {
+    expect(getIndividualPlanTier(1500, 'individual', NATIVE_AI_CREDITS_SUMMER_PROMO_INCLUDED_CREDITS_POLICY)).toBe(
+      'pro-student',
+    )
+    expect(getIndividualPlanTier(7000, 'individual', NATIVE_AI_CREDITS_SUMMER_PROMO_INCLUDED_CREDITS_POLICY)).toBe(
+      'pro-plus',
+    )
+    expect(getIndividualPlanTier(20000, 'individual', NATIVE_AI_CREDITS_SUMMER_PROMO_INCLUDED_CREDITS_POLICY)).toBe(
+      'max',
+    )
+    expect(getPlanLabel(1500, 'individual', NATIVE_AI_CREDITS_SUMMER_PROMO_INCLUDED_CREDITS_POLICY)).toBe(
+      'Copilot Pro',
+    )
+    expect(getPlanLabel(7000, 'individual', NATIVE_AI_CREDITS_SUMMER_PROMO_INCLUDED_CREDITS_POLICY)).toBe(
+      'Copilot Pro+',
+    )
+    expect(getPlanLabel(20000, 'individual', NATIVE_AI_CREDITS_SUMMER_PROMO_INCLUDED_CREDITS_POLICY)).toBe(
+      'Copilot Max',
+    )
+    expect(getIndividualMonthlyAicIncludedCredits(
+      1500,
+      'individual',
+      NATIVE_AI_CREDITS_SUMMER_PROMO_INCLUDED_CREDITS_POLICY,
+    )).toBe(1500)
+    expect(getIndividualMonthlyAicIncludedCredits(
+      7000,
+      'individual',
+      NATIVE_AI_CREDITS_SUMMER_PROMO_INCLUDED_CREDITS_POLICY,
+    )).toBe(7000)
+    expect(getIndividualMonthlyAicIncludedCredits(
+      20000,
+      'individual',
+      NATIVE_AI_CREDITS_SUMMER_PROMO_INCLUDED_CREDITS_POLICY,
+    )).toBe(20000)
+    expect(getIndividualPlanTier(20000, 'individual', NATIVE_AI_CREDITS_STANDARD_INCLUDED_CREDITS_POLICY)).toBe(
+      'max',
+    )
+    expect(getIndividualMonthlyAicIncludedCredits(
+      20000,
+      'individual',
+      NATIVE_AI_CREDITS_STANDARD_INCLUDED_CREDITS_POLICY,
+    )).toBe(20000)
+  })
+
+  it('does not apply post-preview individual quota identities to transition-period reports', () => {
+    expect(getIndividualPlanTier(7000)).toBeNull()
+    expect(getIndividualPlanTier(3900)).toBeNull()
+    expect(getIndividualPlanTier(20000)).toBeNull()
+    expect(getPlanLabel(7000, 'individual')).toBe('Unknown (7,000 PRUs/month)')
+  })
+
+  it('keeps native 3900 scope-aware as organization Enterprise instead of individual Pro+', () => {
+    expect(getIndividualPlanTier(3900, 'individual', NATIVE_AI_CREDITS_SUMMER_PROMO_INCLUDED_CREDITS_POLICY)).toBe(
+      null,
+    )
+    expect(getAicIncludedCreditTier(3900, 'organization', NATIVE_AI_CREDITS_SUMMER_PROMO_INCLUDED_CREDITS_POLICY)).toBe(
+      'enterprise',
+    )
+    expect(getPlanLabel(3900, 'individual', NATIVE_AI_CREDITS_SUMMER_PROMO_INCLUDED_CREDITS_POLICY)).toBe(
+      'Unknown (3,900 AI Credits/month)',
+    )
+    expect(getPlanLabel(3900, 'organization', NATIVE_AI_CREDITS_SUMMER_PROMO_INCLUDED_CREDITS_POLICY)).toBe(
+      'Copilot Enterprise',
     )
   })
 
@@ -267,11 +351,22 @@ describe('AIC included credit tiering and pool sizing', () => {
     expect(getPlanLabel(0)).toBe('Unknown')
   })
 
+  it('formats unknown native individual quotas as AI Credits per month', () => {
+    expect(getPlanLabel(1234, 'individual', NATIVE_AI_CREDITS_SUMMER_PROMO_INCLUDED_CREDITS_POLICY)).toBe(
+      'Unknown (1,234 AI Credits/month)',
+    )
+    expect(getPlanLabel(1234, 'individual', NATIVE_AI_CREDITS_STANDARD_INCLUDED_CREDITS_POLICY)).toBe(
+      'Unknown (1,234 AI Credits/month)',
+    )
+  })
+
   it('selects the maximum known monthly quota while ignoring unknown quota values', () => {
     expect(selectKnownMonthlyQuota(0, UNKNOWN_HIGH_MONTHLY_QUOTA)).toBe(0)
     expect(selectKnownMonthlyQuota(BUSINESS_MONTHLY_QUOTA, UNKNOWN_HIGH_MONTHLY_QUOTA)).toBe(BUSINESS_MONTHLY_QUOTA)
     expect(selectKnownMonthlyQuota(UNKNOWN_HIGH_MONTHLY_QUOTA, ENTERPRISE_MONTHLY_QUOTA)).toBe(ENTERPRISE_MONTHLY_QUOTA)
     expect(selectKnownMonthlyQuota(BUSINESS_MONTHLY_QUOTA, ENTERPRISE_MONTHLY_QUOTA)).toBe(ENTERPRISE_MONTHLY_QUOTA)
+    expect(selectKnownMonthlyQuota(0, 10000)).toBe(0)
+    expect(selectKnownMonthlyQuota(0, 20000, NATIVE_AI_CREDITS_SUMMER_PROMO_INCLUDED_CREDITS_POLICY)).toBe(20000)
   })
 
   it('does not create an organization pool for a single-user Pro/Student report', async () => {
@@ -464,6 +559,21 @@ describe('AIC included credit tiering and pool sizing', () => {
     })
   })
 
+  it('summarizes a native summer single-user report as an individual plan', () => {
+    const summary = calculateLicenseSummary(
+      [{ totalMonthlyQuota: 7000 }],
+      NATIVE_AI_CREDITS_SUMMER_PROMO_INCLUDED_CREDITS_POLICY,
+    )
+
+    expect(summary).toEqual({
+      rows: [
+        { label: 'Copilot Pro+', users: 1, includedAic: 7000 },
+      ],
+      totalUsers: 1,
+      totalIncludedAic: 7000,
+    })
+  })
+
   it('summarizes a single-user report with organization metadata as a business plan', () => {
     const summary = calculateLicenseSummary([
       { totalMonthlyQuota: 300, organizations: ['example-org'], costCenters: ['Cost Center A'] },
@@ -605,6 +715,47 @@ describe('AIC included credit tiering and pool sizing', () => {
       ],
       totalUsers: 2,
       totalIncludedAic: 10000,
+    })
+  })
+
+  it('uses native summer individual plans end-to-end for pipeline allocation and license summaries', async () => {
+    const file = createNativeCsv([
+      ['2026-08-01', 'mona', 'copilot', 'copilot_ai_credit', 'GPT-5', '21000', 'ai-credits', '0.01', '210.00', '0', '210.00', '20000', '', '', '21000', '210.00'],
+    ])
+    const capturedRecords = new CaptureAggregator()
+    let users!: UserUsageAggregator
+    let resolvedPolicy!: IncludedCreditsPolicy
+
+    await runPipeline(file, (reportMetadata, includedCreditsPolicy) => {
+      resolvedPolicy = includedCreditsPolicy
+      users = new UserUsageAggregator(reportMetadata, includedCreditsPolicy)
+      return [capturedRecords, users]
+    })
+
+    expect(resolvedPolicy).toBe(NATIVE_AI_CREDITS_SUMMER_PROMO_INCLUDED_CREDITS_POLICY)
+    expect(capturedRecords.result()).toEqual([
+      expect.objectContaining({
+        total_monthly_quota: 20000,
+        aic_net_amount: 10,
+      }),
+    ])
+    expect(users.result().users).toEqual([
+      expect.objectContaining({
+        username: 'mona',
+        totalMonthlyQuota: 20000,
+        totals: expect.objectContaining({
+          aicQuantity: 21000,
+          aicGrossAmount: 210,
+          aicNetAmount: 10,
+        }),
+      }),
+    ])
+    expect(calculateLicenseSummary(users.result().users, resolvedPolicy)).toEqual({
+      rows: [
+        { label: 'Copilot Max', users: 1, includedAic: 20000 },
+      ],
+      totalUsers: 1,
+      totalIncludedAic: 20000,
     })
   })
 })

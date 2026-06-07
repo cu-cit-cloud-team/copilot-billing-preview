@@ -3,6 +3,7 @@ import { isValidIsoDate } from './isoDate'
 
 export type QuotaUnit = 'pru' | 'aic'
 export type OrganizationIncludedCreditTier = 'business' | 'enterprise'
+export type IndividualIncludedCreditTier = 'pro-student' | 'pro-plus' | 'max'
 
 export type PlanIdentity<TTier extends string = string> = {
   readonly tier: TTier
@@ -10,7 +11,7 @@ export type PlanIdentity<TTier extends string = string> = {
   readonly monthlyQuota: number
 }
 
-export type IncludedCreditsPlan<TTier extends OrganizationIncludedCreditTier = OrganizationIncludedCreditTier> = {
+export type IncludedCreditsPlan<TTier extends string = string> = {
   readonly identity: PlanIdentity<TTier>
   readonly label: string
   readonly monthlyIncludedCredits: number
@@ -20,6 +21,10 @@ export type OrganizationIncludedCreditPlans = {
   readonly [Tier in OrganizationIncludedCreditTier]: IncludedCreditsPlan<Tier>
 }
 
+export type IndividualIncludedCreditPlans = Partial<{
+  readonly [Tier in IndividualIncludedCreditTier]: IncludedCreditsPlan<Tier>
+}>
+
 export type IncludedCreditsPolicyId =
   | 'transition-period-billing-preview'
   | 'native-ai-credits-summer-promo'
@@ -28,6 +33,7 @@ export type IncludedCreditsPolicyId =
 export type IncludedCreditsPolicy = {
   readonly id: IncludedCreditsPolicyId
   readonly organizationPlans: OrganizationIncludedCreditPlans
+  readonly individualPlans: IndividualIncludedCreditPlans
 }
 
 export type ReportPeriod = {
@@ -37,7 +43,41 @@ export type ReportPeriod = {
 
 const COPILOT_BUSINESS_LABEL = 'Copilot Business'
 const COPILOT_ENTERPRISE_LABEL = 'Copilot Enterprise'
+const COPILOT_PRO_TRANSITION_LABEL = 'Copilot Pro/Student'
+const COPILOT_PRO_LABEL = 'Copilot Pro'
+const COPILOT_PRO_PLUS_LABEL = 'Copilot Pro+'
+const COPILOT_MAX_LABEL = 'Copilot Max'
 const NATIVE_AI_CREDITS_STANDARD_POLICY_START_DATE = '2026-09-01'
+
+const POST_PREVIEW_INDIVIDUAL_INCLUDED_CREDIT_PLANS = {
+  'pro-student': {
+    identity: {
+      tier: 'pro-student',
+      quotaUnit: 'aic',
+      monthlyQuota: 1500,
+    },
+    label: COPILOT_PRO_LABEL,
+    monthlyIncludedCredits: 1500,
+  },
+  'pro-plus': {
+    identity: {
+      tier: 'pro-plus',
+      quotaUnit: 'aic',
+      monthlyQuota: 7000,
+    },
+    label: COPILOT_PRO_PLUS_LABEL,
+    monthlyIncludedCredits: 7000,
+  },
+  max: {
+    identity: {
+      tier: 'max',
+      quotaUnit: 'aic',
+      monthlyQuota: 20000,
+    },
+    label: COPILOT_MAX_LABEL,
+    monthlyIncludedCredits: 20000,
+  },
+} as const satisfies IndividualIncludedCreditPlans
 
 export const TRANSITION_PERIOD_INCLUDED_CREDITS_POLICY = {
   id: 'transition-period-billing-preview',
@@ -58,6 +98,26 @@ export const TRANSITION_PERIOD_INCLUDED_CREDITS_POLICY = {
         monthlyQuota: 1000,
       },
       label: COPILOT_ENTERPRISE_LABEL,
+      monthlyIncludedCredits: 7000,
+    },
+  },
+  individualPlans: {
+    'pro-student': {
+      identity: {
+        tier: 'pro-student',
+        quotaUnit: 'pru',
+        monthlyQuota: 300,
+      },
+      label: COPILOT_PRO_TRANSITION_LABEL,
+      monthlyIncludedCredits: 1500,
+    },
+    'pro-plus': {
+      identity: {
+        tier: 'pro-plus',
+        quotaUnit: 'pru',
+        monthlyQuota: 1500,
+      },
+      label: COPILOT_PRO_PLUS_LABEL,
       monthlyIncludedCredits: 7000,
     },
   },
@@ -85,6 +145,7 @@ export const NATIVE_AI_CREDITS_SUMMER_PROMO_INCLUDED_CREDITS_POLICY = {
       monthlyIncludedCredits: 7000,
     },
   },
+  individualPlans: POST_PREVIEW_INDIVIDUAL_INCLUDED_CREDIT_PLANS,
 } as const satisfies IncludedCreditsPolicy
 
 export const NATIVE_AI_CREDITS_STANDARD_INCLUDED_CREDITS_POLICY = {
@@ -109,6 +170,7 @@ export const NATIVE_AI_CREDITS_STANDARD_INCLUDED_CREDITS_POLICY = {
       monthlyIncludedCredits: 3900,
     },
   },
+  individualPlans: POST_PREVIEW_INDIVIDUAL_INCLUDED_CREDIT_PLANS,
 } as const satisfies IncludedCreditsPolicy
 
 function getReportFormat(reportMetadataOrFormat: ReportFormat | ReportFormatMetadata): ReportFormat {
