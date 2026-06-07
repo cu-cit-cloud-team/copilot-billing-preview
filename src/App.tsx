@@ -125,7 +125,7 @@ function App() {
     let orgAggregator!: OrganizationAggregator
     let userAggregator!: UserUsageAggregator
 
-    const pipelineResult = await runPipeline(file, (reportMetadata) => {
+    const pipelineResult = await runPipeline(file, (reportMetadata, includedCreditsPolicy) => {
       statsAggregator = new QuickStatsAggregator()
       contextAggregator = new ReportContextAggregator()
       dailyAggregator = new DailyUsageAggregator(reportMetadata)
@@ -133,7 +133,7 @@ function App() {
       productAggregator = new ProductUsageAggregator(reportMetadata)
       costCenterAggregator = new CostCenterAggregator(reportMetadata)
       orgAggregator = new OrganizationAggregator(reportMetadata)
-      userAggregator = new UserUsageAggregator(reportMetadata)
+      userAggregator = new UserUsageAggregator(reportMetadata, includedCreditsPolicy)
 
       return [
         statsAggregator,
@@ -522,7 +522,7 @@ function App() {
   const licenseAmount = reportPlanScope === 'organization'
     ? organizationLicenseAmount || undefined
     : individualUser
-      ? getIndividualLicenseMonthlyCost(individualUser.totalMonthlyQuota)
+      ? getIndividualLicenseMonthlyCost(individualUser.totalMonthlyQuota, includedCreditsPolicy)
       : undefined
   const licenseSeatCounts = reportPlanScope === 'organization'
     ? { business: effectiveBusinessSeats, enterprise: effectiveEnterpriseSeats }
@@ -577,6 +577,7 @@ function App() {
     ? calculateIndividualPlanUpgradeRecommendation({
         totalMonthlyQuota: individualUser.totalMonthlyQuota,
         currentMonthlyAicAdditionalUsageBillsUsd: monthlyAicAdditionalUsageBills,
+        includedCreditsPolicy,
       })
     : null
 

@@ -10,63 +10,50 @@ import {
   TRANSITION_PERIOD_INCLUDED_CREDITS_POLICY,
   resolveIncludedCreditsPolicy,
   type IncludedCreditsPolicy,
+  type IndividualIncludedCreditTier,
   type OrganizationIncludedCreditTier,
-  type PlanIdentity,
   type ReportPeriod,
 } from './includedCreditsPolicy'
 import { isValidIsoDate } from './isoDate'
 import { streamLines, type StreamProgress } from './streamer'
 import type { ReportFormatMetadata } from './reportAdapters'
 
-type IndividualPlan = 'pro-student' | 'pro-plus'
+type IndividualIncludedCreditsPlan = NonNullable<IncludedCreditsPolicy['individualPlans'][IndividualIncludedCreditTier]>
 
-type IndividualIncludedCreditsPlans = {
-  readonly [Tier in IndividualPlan]: {
-    readonly identity: PlanIdentity<Tier>
-    readonly label: string
-    readonly monthlyIncludedCredits: number
-  }
+function getIndividualIncludedCreditsPlans(policy: IncludedCreditsPolicy): IndividualIncludedCreditsPlan[] {
+  return Object.values(policy.individualPlans)
+    .filter((plan): plan is IndividualIncludedCreditsPlan => plan !== undefined)
 }
 
-const INDIVIDUAL_INCLUDED_CREDIT_PLANS = {
-  'pro-student': {
-    identity: {
-      tier: 'pro-student',
-      quotaUnit: 'pru',
-      monthlyQuota: 300,
-    },
-    label: 'Copilot Pro/Student',
-    monthlyIncludedCredits: 1500,
-  },
-  'pro-plus': {
-    identity: {
-      tier: 'pro-plus',
-      quotaUnit: 'pru',
-      monthlyQuota: 1500,
-    },
-    label: 'Copilot Pro+',
-    monthlyIncludedCredits: 7000,
-  },
-} as const satisfies IndividualIncludedCreditsPlans
+function getRequiredIndividualIncludedCreditsPlan(
+  policy: IncludedCreditsPolicy,
+  tier: IndividualIncludedCreditTier,
+): IndividualIncludedCreditsPlan {
+  const plan = policy.individualPlans[tier]
+  if (!plan) {
+    throw new Error(`Included credits policy ${policy.id} does not define ${tier}.`)
+  }
+  return plan
+}
+
+const TRANSITION_PERIOD_PRO_PLAN = getRequiredIndividualIncludedCreditsPlan(
+  TRANSITION_PERIOD_INCLUDED_CREDITS_POLICY,
+  'pro-student',
+)
+const TRANSITION_PERIOD_PRO_PLUS_PLAN = getRequiredIndividualIncludedCreditsPlan(
+  TRANSITION_PERIOD_INCLUDED_CREDITS_POLICY,
+  'pro-plus',
+)
 
 export const BUSINESS_MONTHLY_QUOTA = TRANSITION_PERIOD_INCLUDED_CREDITS_POLICY.organizationPlans.business.identity.monthlyQuota
 export const ENTERPRISE_MONTHLY_QUOTA = TRANSITION_PERIOD_INCLUDED_CREDITS_POLICY.organizationPlans.enterprise.identity.monthlyQuota
-export const PRO_MONTHLY_QUOTA = INDIVIDUAL_INCLUDED_CREDIT_PLANS['pro-student'].identity.monthlyQuota
-export const PRO_PLUS_MONTHLY_QUOTA = INDIVIDUAL_INCLUDED_CREDIT_PLANS['pro-plus'].identity.monthlyQuota
-const INDIVIDUAL_KNOWN_MONTHLY_QUOTAS = new Set<number>([
-  PRO_MONTHLY_QUOTA,
-  PRO_PLUS_MONTHLY_QUOTA,
-])
-const TRANSITION_PERIOD_KNOWN_MONTHLY_QUOTAS = new Set<number>([
-  BUSINESS_MONTHLY_QUOTA,
-  ENTERPRISE_MONTHLY_QUOTA,
-  ...INDIVIDUAL_KNOWN_MONTHLY_QUOTAS,
-])
+export const PRO_MONTHLY_QUOTA = TRANSITION_PERIOD_PRO_PLAN.identity.monthlyQuota
+export const PRO_PLUS_MONTHLY_QUOTA = TRANSITION_PERIOD_PRO_PLUS_PLAN.identity.monthlyQuota
 
 export const BUSINESS_MONTHLY_AIC_INCLUDED_CREDITS = TRANSITION_PERIOD_INCLUDED_CREDITS_POLICY.organizationPlans.business.monthlyIncludedCredits
 export const ENTERPRISE_MONTHLY_AIC_INCLUDED_CREDITS = TRANSITION_PERIOD_INCLUDED_CREDITS_POLICY.organizationPlans.enterprise.monthlyIncludedCredits
-export const PRO_MONTHLY_AIC_INCLUDED_CREDITS = INDIVIDUAL_INCLUDED_CREDIT_PLANS['pro-student'].monthlyIncludedCredits
-export const PRO_PLUS_MONTHLY_AIC_INCLUDED_CREDITS = INDIVIDUAL_INCLUDED_CREDIT_PLANS['pro-plus'].monthlyIncludedCredits
+export const PRO_MONTHLY_AIC_INCLUDED_CREDITS = TRANSITION_PERIOD_PRO_PLAN.monthlyIncludedCredits
+export const PRO_PLUS_MONTHLY_AIC_INCLUDED_CREDITS = TRANSITION_PERIOD_PRO_PLUS_PLAN.monthlyIncludedCredits
 
 export type AicIncludedCreditsOverrides = {
   business?: number
@@ -75,7 +62,7 @@ export type AicIncludedCreditsOverrides = {
 
 export type ReportPlanScope = 'individual' | 'organization'
 export type AicIncludedCreditTier = OrganizationIncludedCreditTier | null
-export type IndividualPlanTier = IndividualPlan | null
+export type IndividualPlanTier = IndividualIncludedCreditTier | null
 
 export type LicenseSummaryRow = {
   label: string
@@ -102,6 +89,7 @@ type ReportScopeUser = {
 
 export type AicIncludedCreditsContext = {
   reportPlanScope: ReportPlanScope
+  includedCreditsPolicy: IncludedCreditsPolicy
   organizationIncludedCreditsPool: number
   individualMonthlyIncludedCredits: number
 }
@@ -140,10 +128,11 @@ function findOrganizationIncludedCreditsPlan(
 function findIndividualIncludedCreditsPlan(
   totalMonthlyQuota: number,
   reportPlanScope: ReportPlanScope,
+  policy: IncludedCreditsPolicy,
 ) {
   if (reportPlanScope !== 'individual') return null
 
-  return Object.values(INDIVIDUAL_INCLUDED_CREDIT_PLANS)
+  return getIndividualIncludedCreditsPlans(policy)
     .find((plan) => plan.identity.monthlyQuota === totalMonthlyQuota) ?? null
 }
 
@@ -153,12 +142,9 @@ export function isKnownMonthlyQuota(totalMonthlyQuota: number): boolean {
 
 function isKnownMonthlyQuotaForPolicy(totalMonthlyQuota: number, policy: IncludedCreditsPolicy): boolean {
   if (!Number.isFinite(totalMonthlyQuota)) return false
-  if (policy.id === TRANSITION_PERIOD_INCLUDED_CREDITS_POLICY.id) {
-    return TRANSITION_PERIOD_KNOWN_MONTHLY_QUOTAS.has(totalMonthlyQuota)
-  }
 
   return (
-    INDIVIDUAL_KNOWN_MONTHLY_QUOTAS.has(totalMonthlyQuota)
+    getIndividualIncludedCreditsPlans(policy).some((plan) => plan.identity.monthlyQuota === totalMonthlyQuota)
     || Object.values(policy.organizationPlans).some((plan) => plan.identity.monthlyQuota === totalMonthlyQuota)
   )
 }
@@ -185,7 +171,7 @@ export function getPlanLabel(
   const organizationPlan = findOrganizationIncludedCreditsPlan(totalMonthlyQuota, reportPlanScope, policy)
   if (organizationPlan) return organizationPlan.label
 
-  const individualPlan = findIndividualIncludedCreditsPlan(totalMonthlyQuota, reportPlanScope)
+  const individualPlan = findIndividualIncludedCreditsPlan(totalMonthlyQuota, reportPlanScope, policy)
   if (individualPlan) return individualPlan.label
 
   if (totalMonthlyQuota > 0) {
@@ -195,9 +181,11 @@ export function getPlanLabel(
 }
 
 function getUnknownQuotaLabel(reportPlanScope: ReportPlanScope, policy: IncludedCreditsPolicy): string {
-  if (reportPlanScope === 'individual') return 'PRUs/month'
+  const quotaUnit = reportPlanScope === 'individual'
+    ? getIndividualIncludedCreditsPlans(policy)[0]?.identity.quotaUnit ?? policy.organizationPlans.business.identity.quotaUnit
+    : policy.organizationPlans.business.identity.quotaUnit
 
-  return policy.organizationPlans.business.identity.quotaUnit === 'aic' ? 'AI Credits/month' : 'PRUs/month'
+  return quotaUnit === 'aic' ? 'AI Credits/month' : 'PRUs/month'
 }
 
 export function getAicIncludedCreditTier(
@@ -211,8 +199,9 @@ export function getAicIncludedCreditTier(
 export function getIndividualPlanTier(
   totalMonthlyQuota: number,
   reportPlanScope: ReportPlanScope = 'individual',
+  policy: IncludedCreditsPolicy = TRANSITION_PERIOD_INCLUDED_CREDITS_POLICY,
 ): IndividualPlanTier {
-  return findIndividualIncludedCreditsPlan(totalMonthlyQuota, reportPlanScope)?.identity.tier ?? null
+  return findIndividualIncludedCreditsPlan(totalMonthlyQuota, reportPlanScope, policy)?.identity.tier ?? null
 }
 
 export function getMonthlyAicIncludedCredits(
@@ -226,8 +215,9 @@ export function getMonthlyAicIncludedCredits(
 export function getIndividualMonthlyAicIncludedCredits(
   totalMonthlyQuota: number,
   reportPlanScope: ReportPlanScope = 'individual',
+  policy: IncludedCreditsPolicy = TRANSITION_PERIOD_INCLUDED_CREDITS_POLICY,
 ): number {
-  return findIndividualIncludedCreditsPlan(totalMonthlyQuota, reportPlanScope)?.monthlyIncludedCredits ?? 0
+  return findIndividualIncludedCreditsPlan(totalMonthlyQuota, reportPlanScope, policy)?.monthlyIncludedCredits ?? 0
 }
 
 function includeDateInReportPeriod(reportPeriod: ReportPeriod, rawDate: string): ReportPeriod {
@@ -274,11 +264,11 @@ export function calculateLicenseSummary(
   const reportPlanScope = inferReportPlanScope(users.length, hasOrganizationContext(users))
   if (reportPlanScope === 'individual') {
     const quota = users[0]?.totalMonthlyQuota ?? 0
-    const includedAic = getIndividualMonthlyAicIncludedCredits(quota, reportPlanScope)
+    const includedAic = getIndividualMonthlyAicIncludedCredits(quota, reportPlanScope, policy)
 
     return {
       rows: users.length === 1
-        ? [{ label: getPlanLabel(quota, reportPlanScope), users: 1, includedAic }]
+        ? [{ label: getPlanLabel(quota, reportPlanScope, policy), users: 1, includedAic }]
         : [],
       totalUsers: users.length,
       totalIncludedAic: includedAic,
@@ -362,8 +352,9 @@ export async function calculateAicIncludedCreditsContext(
     const quota = quotasByUser.values().next().value ?? 0
     return {
       reportPlanScope,
+      includedCreditsPolicy,
       organizationIncludedCreditsPool: 0,
-      individualMonthlyIncludedCredits: getIndividualMonthlyAicIncludedCredits(quota, reportPlanScope),
+      individualMonthlyIncludedCredits: getIndividualMonthlyAicIncludedCredits(quota, reportPlanScope, includedCreditsPolicy),
     }
   }
 
@@ -371,6 +362,7 @@ export async function calculateAicIncludedCreditsContext(
 
   return {
     reportPlanScope,
+    includedCreditsPolicy,
     organizationIncludedCreditsPool: overriddenOrganizationIncludedCreditPool ?? Array.from(quotasByUser.values()).reduce(
       (total, quota) => total + getMonthlyAicIncludedCredits(quota, reportPlanScope, includedCreditsPolicy),
       0,
@@ -473,6 +465,12 @@ export async function createAicIncludedCreditsAllocator(
 ): Promise<PooledAicIncludedCreditsAllocator | IndividualAicIncludedCreditsAllocator> {
   const includedCreditsContext = await calculateAicIncludedCreditsContext(file, overrides, options)
 
+  return createAicIncludedCreditsAllocatorFromContext(includedCreditsContext)
+}
+
+export function createAicIncludedCreditsAllocatorFromContext(
+  includedCreditsContext: AicIncludedCreditsContext,
+): PooledAicIncludedCreditsAllocator | IndividualAicIncludedCreditsAllocator {
   if (includedCreditsContext.reportPlanScope === 'individual') {
     return new IndividualAicIncludedCreditsAllocator(includedCreditsContext.individualMonthlyIncludedCredits)
   }

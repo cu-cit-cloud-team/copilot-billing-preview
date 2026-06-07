@@ -36,6 +36,42 @@ describe('resolveIncludedCreditsPolicy', () => {
     })).toBe(NATIVE_AI_CREDITS_SUMMER_PROMO_INCLUDED_CREDITS_POLICY)
   })
 
+  it('defines post-preview individual plan quota identities and included AI Credits', () => {
+    expect(NATIVE_AI_CREDITS_SUMMER_PROMO_INCLUDED_CREDITS_POLICY.individualPlans['pro-student']).toEqual({
+      identity: {
+        tier: 'pro-student',
+        quotaUnit: 'aic',
+        monthlyQuota: 1500,
+      },
+      label: 'Copilot Pro',
+      monthlyIncludedCredits: 1500,
+    })
+    expect(NATIVE_AI_CREDITS_SUMMER_PROMO_INCLUDED_CREDITS_POLICY.individualPlans['pro-plus']).toEqual({
+      identity: {
+        tier: 'pro-plus',
+        quotaUnit: 'aic',
+        monthlyQuota: 7000,
+      },
+      label: 'Copilot Pro+',
+      monthlyIncludedCredits: 7000,
+    })
+    expect(NATIVE_AI_CREDITS_SUMMER_PROMO_INCLUDED_CREDITS_POLICY.individualPlans.max).toEqual({
+      identity: {
+        tier: 'max',
+        quotaUnit: 'aic',
+        monthlyQuota: 20000,
+      },
+      label: 'Copilot Max',
+      monthlyIncludedCredits: 20000,
+    })
+  })
+
+  it('uses the same individual plan identities and allotments for native standard periods', () => {
+    expect(NATIVE_AI_CREDITS_STANDARD_INCLUDED_CREDITS_POLICY.individualPlans).toEqual(
+      NATIVE_AI_CREDITS_SUMMER_PROMO_INCLUDED_CREDITS_POLICY.individualPlans,
+    )
+  })
+
   it('uses period start to keep native report periods starting on 2026-08-31 in the summer promo policy', () => {
     expect(resolveIncludedCreditsPolicy(NATIVE_AI_CREDITS_REPORT_METADATA, {
       startDate: '2026-08-31',

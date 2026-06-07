@@ -1,8 +1,11 @@
 import {
   getIndividualPlanTier,
-  PRO_MONTHLY_AIC_INCLUDED_CREDITS,
-  PRO_PLUS_MONTHLY_AIC_INCLUDED_CREDITS,
 } from '../pipeline/aicIncludedCredits'
+import {
+  TRANSITION_PERIOD_INCLUDED_CREDITS_POLICY,
+  type IncludedCreditsPolicy,
+  type IndividualIncludedCreditTier,
+} from '../pipeline/includedCreditsPolicy'
 import { AIC_UNIT_PRICE_USD } from './billingConstants'
 
 export const PRO_LICENSE_MONTHLY_COST = 10
@@ -11,32 +14,59 @@ export const MAX_LICENSE_MONTHLY_COST = 100
 export const MAX_PROMOTIONAL_MONTHLY_AIC_INCLUDED_CREDITS = 20000
 
 type RecommendableIndividualPlan = {
-  tier: 'pro-student' | 'pro-plus' | 'max'
+  tier: IndividualIncludedCreditTier
   label: string
   monthlyLicenseCostUsd: number
   monthlyIncludedAic: number
 }
 
-const RECOMMENDABLE_INDIVIDUAL_PLANS: RecommendableIndividualPlan[] = [
-  {
-    tier: 'pro-student',
+const RECOMMENDABLE_INDIVIDUAL_PLAN_ORDER = ['pro-student', 'pro-plus', 'max'] as const satisfies readonly IndividualIncludedCreditTier[]
+
+const INDIVIDUAL_PLAN_METADATA: Record<IndividualIncludedCreditTier, {
+  label: string
+  monthlyLicenseCostUsd: number
+}> = {
+  'pro-student': {
     label: 'Pro',
     monthlyLicenseCostUsd: PRO_LICENSE_MONTHLY_COST,
-    monthlyIncludedAic: PRO_MONTHLY_AIC_INCLUDED_CREDITS,
   },
-  {
-    tier: 'pro-plus',
+  'pro-plus': {
     label: 'Pro+',
     monthlyLicenseCostUsd: PRO_PLUS_LICENSE_MONTHLY_COST,
-    monthlyIncludedAic: PRO_PLUS_MONTHLY_AIC_INCLUDED_CREDITS,
   },
-  {
-    tier: 'max',
+  max: {
     label: 'Max',
     monthlyLicenseCostUsd: MAX_LICENSE_MONTHLY_COST,
-    monthlyIncludedAic: MAX_PROMOTIONAL_MONTHLY_AIC_INCLUDED_CREDITS,
   },
-]
+}
+
+function getRecommendableIndividualPlans(policy: IncludedCreditsPolicy): RecommendableIndividualPlan[] {
+  const policyPlans = RECOMMENDABLE_INDIVIDUAL_PLAN_ORDER.flatMap((tier) => {
+    const plan = policy.individualPlans[tier]
+    if (!plan) return []
+
+    return [{
+      tier,
+      label: INDIVIDUAL_PLAN_METADATA[tier].label,
+      monthlyLicenseCostUsd: INDIVIDUAL_PLAN_METADATA[tier].monthlyLicenseCostUsd,
+      monthlyIncludedAic: plan.monthlyIncludedCredits,
+    }]
+  })
+
+  if (policy.id !== TRANSITION_PERIOD_INCLUDED_CREDITS_POLICY.id || policy.individualPlans.max) {
+    return policyPlans
+  }
+
+  return [
+    ...policyPlans,
+    {
+      tier: 'max',
+      label: INDIVIDUAL_PLAN_METADATA.max.label,
+      monthlyLicenseCostUsd: INDIVIDUAL_PLAN_METADATA.max.monthlyLicenseCostUsd,
+      monthlyIncludedAic: MAX_PROMOTIONAL_MONTHLY_AIC_INCLUDED_CREDITS,
+    },
+  ]
+}
 
 export type IndividualPlanUpgradeRecommendation = {
   currentPlanLabel: string
@@ -51,21 +81,24 @@ export type IndividualPlanUpgradeRecommendation = {
   upgradedTotalBillUsd: number
 }
 
-export function getIndividualLicenseMonthlyCost(totalMonthlyQuota: number): number | undefined {
-  const planTier = getIndividualPlanTier(totalMonthlyQuota, 'individual')
-  if (planTier === 'pro-plus') return PRO_PLUS_LICENSE_MONTHLY_COST
-  if (planTier === 'pro-student') return PRO_LICENSE_MONTHLY_COST
-  return undefined
+export function getIndividualLicenseMonthlyCost(
+  totalMonthlyQuota: number,
+  includedCreditsPolicy: IncludedCreditsPolicy = TRANSITION_PERIOD_INCLUDED_CREDITS_POLICY,
+): number | undefined {
+  const planTier = getIndividualPlanTier(totalMonthlyQuota, 'individual', includedCreditsPolicy)
+  return planTier ? INDIVIDUAL_PLAN_METADATA[planTier].monthlyLicenseCostUsd : undefined
 }
 
 export function calculateIndividualPlanUpgradeRecommendation({
   totalMonthlyQuota,
   currentMonthlyAicAdditionalUsageBillsUsd,
+  includedCreditsPolicy = TRANSITION_PERIOD_INCLUDED_CREDITS_POLICY,
 }: {
   totalMonthlyQuota: number
   currentMonthlyAicAdditionalUsageBillsUsd: number[]
+  includedCreditsPolicy?: IncludedCreditsPolicy
 }): IndividualPlanUpgradeRecommendation | null {
-  const planTier = getIndividualPlanTier(totalMonthlyQuota, 'individual')
+  const planTier = getIndividualPlanTier(totalMonthlyQuota, 'individual', includedCreditsPolicy)
   if (!planTier || currentMonthlyAicAdditionalUsageBillsUsd.length === 0) {
     return null
   }
@@ -75,14 +108,15 @@ export function calculateIndividualPlanUpgradeRecommendation({
     return null
   }
 
-  const currentPlanIndex = RECOMMENDABLE_INDIVIDUAL_PLANS.findIndex((plan) => plan.tier === planTier)
-  const currentPlan = RECOMMENDABLE_INDIVIDUAL_PLANS[currentPlanIndex]
+  const recommendableIndividualPlans = getRecommendableIndividualPlans(includedCreditsPolicy)
+  const currentPlanIndex = recommendableIndividualPlans.findIndex((plan) => plan.tier === planTier)
+  const currentPlan = recommendableIndividualPlans[currentPlanIndex]
   if (!currentPlan) {
     return null
   }
 
   const currentAdditionalUsageAic = currentAicAdditionalUsageBillUsd / AIC_UNIT_PRICE_USD
-  const recommendation = RECOMMENDABLE_INDIVIDUAL_PLANS
+  const recommendation = recommendableIndividualPlans
     .slice(currentPlanIndex + 1)
     .map((targetPlan) => {
       const extraIncludedAic = targetPlan.monthlyIncludedAic - currentPlan.monthlyIncludedAic

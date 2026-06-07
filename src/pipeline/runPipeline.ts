@@ -1,5 +1,10 @@
 import type { Aggregator } from './aggregators/base'
-import { createAicIncludedCreditsAllocator, type AicIncludedCreditsOverrides } from './aicIncludedCredits'
+import {
+  calculateAicIncludedCreditsContext,
+  createAicIncludedCreditsAllocatorFromContext,
+  type AicIncludedCreditsOverrides,
+} from './aicIncludedCredits'
+import type { IncludedCreditsPolicy } from './includedCreditsPolicy'
 import {
   InvalidReportError,
   parseTokenUsageHeader,
@@ -63,7 +68,10 @@ export interface PipelineResult {
 
 export type PipelineAggregators =
   | Aggregator<TokenUsageRecord, unknown, TokenUsageHeader>[]
-  | ((reportMetadata: ReportFormatMetadata) => Aggregator<TokenUsageRecord, unknown, TokenUsageHeader>[])
+  | ((
+    reportMetadata: ReportFormatMetadata,
+    includedCreditsPolicy: IncludedCreditsPolicy,
+  ) => Aggregator<TokenUsageRecord, unknown, TokenUsageHeader>[])
 
 const ANALYSIS_PROGRESS_WEIGHT = 0.4
 const MIN_PROGRESS_INCREMENT_PERCENT = 1
@@ -100,9 +108,6 @@ export async function runPipeline(
   } = options ?? {}
   const reportAdapter = await validateFileFormat(file)
   const reportMetadata = reportAdapter.metadata
-  const aggregators = typeof aggregatorsOrFactory === 'function'
-    ? aggregatorsOrFactory(reportMetadata)
-    : aggregatorsOrFactory
   let lastProgressStage: PipelineProgress['stage'] | null = null
   let lastProgressPercent = -1
   let lastProgressTimestamp = 0
@@ -148,12 +153,16 @@ export async function runPipeline(
     return true
   }
 
-  const aicIncludedCreditAllocator = await createAicIncludedCreditsAllocator(file, includedCreditsOverrides, {
+  const includedCreditsContext = await calculateAicIncludedCreditsContext(file, includedCreditsOverrides, {
     reportMetadata,
     onProgress: (streamProgress) => {
       emitProgress('analyzing', 0, streamProgress)
     },
   })
+  const aggregators = typeof aggregatorsOrFactory === 'function'
+    ? aggregatorsOrFactory(reportMetadata, includedCreditsContext.includedCreditsPolicy)
+    : aggregatorsOrFactory
+  const aicIncludedCreditAllocator = createAicIncludedCreditsAllocatorFromContext(includedCreditsContext)
   let header: TokenUsageHeader | null = null
   let reportRowCount = 0
   let rowIndex = 0

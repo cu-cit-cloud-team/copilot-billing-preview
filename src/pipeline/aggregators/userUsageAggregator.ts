@@ -159,11 +159,14 @@ export class UserUsageAggregator implements Aggregator<TokenUsageRecord, UserUsa
   private readonly reportFormat: ReportFormat
   private readonly quotaPolicy: IncludedCreditsPolicy
 
-  constructor(reportMetadataOrFormat?: ReportFormat | ReportFormatMetadata) {
+  constructor(
+    reportMetadataOrFormat?: ReportFormat | ReportFormatMetadata,
+    includedCreditsPolicy?: IncludedCreditsPolicy,
+  ) {
     this.reportFormat = getAggregatorReportFormat(reportMetadataOrFormat)
-    this.quotaPolicy = this.reportFormat === 'native-ai-credits'
+    this.quotaPolicy = includedCreditsPolicy ?? (this.reportFormat === 'native-ai-credits'
       ? NATIVE_AI_CREDITS_STANDARD_INCLUDED_CREDITS_POLICY
-      : TRANSITION_PERIOD_INCLUDED_CREDITS_POLICY
+      : TRANSITION_PERIOD_INCLUDED_CREDITS_POLICY)
   }
 
   onHeader(): void {
