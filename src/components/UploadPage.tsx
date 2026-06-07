@@ -53,7 +53,7 @@ export function UploadPage({
           and potential charges.
         </p>
         <p className="mx-auto mb-8 max-w-[640px] text-fg-muted text-[15px] leading-[1.7]">
-          Upload a Copilot usage billing CSV to analyze your report. Enterprise Admins or Billing Managers
+          Upload a Copilot usage-based billing CSV to analyze your report. Enterprise Admins or Billing Managers
           can download usage-based billing reports from{' '}
           <strong>Billing and licensing → Usage → AI usage</strong>.
         </p>
@@ -117,7 +117,7 @@ export function UploadPage({
                   <UploadIcon size={40} className="fill-fg-muted" aria-hidden />
                 </div>
                 <h3 className="m-0 font-semibold text-fg-default text-[18px] sm:text-[20px]">Drop your CSV here or click to browse</h3>
-                <p className="m-0 text-fg-muted text-[14px]">Copilot usage billing CSV</p>
+                <p className="m-0 text-fg-muted text-[14px]">Copilot usage-based billing CSV</p>
               </>
             )}
           </div>
