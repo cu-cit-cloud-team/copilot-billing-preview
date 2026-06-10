@@ -3,14 +3,14 @@ import type { ChangeEvent } from 'react'
 import type { UserUsage } from '../pipeline/aggregators/userUsageAggregator'
 import {
   type AicIncludedCreditsOverrides,
-  BUSINESS_MONTHLY_AIC_INCLUDED_CREDITS,
-  ENTERPRISE_MONTHLY_AIC_INCLUDED_CREDITS,
   calculateLicenseSummary,
   inferReportPlanScope,
 } from '../pipeline/aicIncludedCredits'
+import { TRANSITION_PERIOD_INCLUDED_CREDITS_POLICY, type IncludedCreditsPolicy } from '../pipeline/includedCreditsPolicy'
 import { calculateSavingsDifference } from '../utils/billingComparison'
 import { InfoTip, ValidationPopover } from '../components/InfoTip'
 import { formatAic, formatDifference } from '../utils/format'
+import { isNativeAiCreditsMode, type ReportMode } from '../utils/reportMode'
 import { getSeatCountInputError, normalizeSeatCount, parseSeatCountInput } from '../utils/seatCounts'
 import { Trie } from '../utils/trie'
 import { th, thBase, thNum, td, tdNum, sortBtn } from '../components/ui/tableStyles'
@@ -50,15 +50,25 @@ export interface UsersViewProps {
   seatOverrides?: SeatOverrides
   onSeatOverridesChange?: (overrides: SeatOverrides) => void
   onSelectUser?: (username: string) => void
+  reportMode?: ReportMode
+  includedCreditsPolicy?: IncludedCreditsPolicy
 }
 
-export function UsersView({ users, seatOverrides = {}, onSeatOverridesChange, onSelectUser }: UsersViewProps) {
+export function UsersView({
+  users,
+  seatOverrides = {},
+  onSeatOverridesChange,
+  onSelectUser,
+  reportMode = 'transition-period-billing-preview',
+  includedCreditsPolicy = TRANSITION_PERIOD_INCLUDED_CREDITS_POLICY,
+}: UsersViewProps) {
   const [query, setQuery] = useState('')
   const [pageAnchor, setPageAnchor] = useState<string | null>(null)
   const [sortKey, setSortKey] = useState<SortKey>('aicQuantity')
   const [sortDir, setSortDir] = useState<SortDir>('desc')
 
-  const licenseSummary = useMemo(() => calculateLicenseSummary(users), [users])
+  const isNativeAiCredits = isNativeAiCreditsMode(reportMode)
+  const licenseSummary = useMemo(() => calculateLicenseSummary(users, includedCreditsPolicy), [users, includedCreditsPolicy])
   const reportPlanScope = useMemo(
     () => inferReportPlanScope(users.length, users.some((user) => user.organizations.length > 0 || user.costCenters.length > 0)),
     [users],
@@ -89,8 +99,8 @@ export function UsersView({ users, seatOverrides = {}, onSeatOverridesChange, on
 
   const adjustedSummary = useMemo(() => {
     if (reportPlanScope === 'individual') return licenseSummary
-    const bAic = displayBusiness * BUSINESS_MONTHLY_AIC_INCLUDED_CREDITS
-    const eAic = displayEnterprise * ENTERPRISE_MONTHLY_AIC_INCLUDED_CREDITS
+    const bAic = displayBusiness * includedCreditsPolicy.organizationPlans.business.monthlyIncludedCredits
+    const eAic = displayEnterprise * includedCreditsPolicy.organizationPlans.enterprise.monthlyIncludedCredits
     return {
       rows: [
         { label: 'Copilot Business', users: displayBusiness, includedAic: bAic },
@@ -99,7 +109,7 @@ export function UsersView({ users, seatOverrides = {}, onSeatOverridesChange, on
       totalUsers: displayBusiness + displayEnterprise,
       totalIncludedAic: bAic + eAic,
     }
-  }, [licenseSummary, displayBusiness, displayEnterprise, reportPlanScope])
+  }, [includedCreditsPolicy, licenseSummary, displayBusiness, displayEnterprise, reportPlanScope])
 
   const handleEdit = () => {
     setDraftBusiness(String(savedBusiness))
@@ -198,7 +208,7 @@ export function UsersView({ users, seatOverrides = {}, onSeatOverridesChange, on
         <h2 className="m-0 text-lg text-fg-default">Users</h2>
         <span className="text-[13px] text-fg-muted">
           {filteredUsers.length.toLocaleString()} with activity
-          <InfoTip text="Only users who generated at least one premium request during this report period are shown. This may be fewer than your total licensed seats. You can edit the user counts in the table below to estimate the full included credit pool." />
+          <InfoTip text={isNativeAiCredits ? 'Only users who generated AI Credits usage during this report period are shown. This may be fewer than your total licensed seats. You can edit the user counts in the table below to estimate the full included credit pool.' : 'Only users who generated at least one premium request during this report period are shown. This may be fewer than your total licensed seats. You can edit the user counts in the table below to estimate the full included credit pool.'} />
         </span>
       </div>
       <div className="bg-bg-default border border-border-default rounded-md overflow-auto mb-4 p-4">
@@ -295,7 +305,7 @@ export function UsersView({ users, seatOverrides = {}, onSeatOverridesChange, on
             <br />
             You can <strong>add</strong> missing Copilot Business and Copilot Enterprise licenses for accurate bill estimation.
           </p>
-          {displayBusiness > 0 && (
+          {!isNativeAiCredits && displayBusiness > 0 && (
             <p>
               Upgrading Copilot Business users to Copilot Enterprise during the promotional period reduces the additional usage cost by <strong>$20</strong> per upgrade.
             </p>
@@ -350,12 +360,14 @@ export function UsersView({ users, seatOverrides = {}, onSeatOverridesChange, on
                   <span className="min-w-[2ch]" aria-hidden="true">{sortIndicator('username')}</span>
                 </button>
               </th>
-              <th className={`${thBase} text-right select-none`} aria-sort={getAriaSort('requests')}>
-                <button type="button" className={`${sortBtn} justify-end`} onClick={() => handleSort('requests')}>
-                  <span>PRUs</span>
-                  <span className="min-w-[2ch]" aria-hidden="true">{sortIndicator('requests')}</span>
-                </button>
-              </th>
+              {!isNativeAiCredits && (
+                <th className={`${thBase} text-right select-none`} aria-sort={getAriaSort('requests')}>
+                  <button type="button" className={`${sortBtn} justify-end`} onClick={() => handleSort('requests')}>
+                    <span>PRUs</span>
+                    <span className="min-w-[2ch]" aria-hidden="true">{sortIndicator('requests')}</span>
+                  </button>
+                </th>
+              )}
               <th className={`${thBase} text-right select-none`} aria-sort={getAriaSort('aicQuantity')}>
                 <button type="button" className={`${sortBtn} justify-end`} onClick={() => handleSort('aicQuantity')}>
                   <span>AICs</span>
@@ -368,24 +380,28 @@ export function UsersView({ users, seatOverrides = {}, onSeatOverridesChange, on
                   <span className="min-w-[2ch]" aria-hidden="true">{sortIndicator('distinctModels')}</span>
                 </button>
               </th>
-              <th className={`${thBase} text-right select-none`} aria-sort={getAriaSort('netAmount')}>
-                <button type="button" className={`${sortBtn} justify-end`} onClick={() => handleSort('netAmount')}>
-                  <span>PRU Net Cost</span>
-                  <span className="min-w-[2ch]" aria-hidden="true">{sortIndicator('netAmount')}</span>
-                </button>
-              </th>
+              {!isNativeAiCredits && (
+                <th className={`${thBase} text-right select-none`} aria-sort={getAriaSort('netAmount')}>
+                  <button type="button" className={`${sortBtn} justify-end`} onClick={() => handleSort('netAmount')}>
+                    <span>PRU Net Cost</span>
+                    <span className="min-w-[2ch]" aria-hidden="true">{sortIndicator('netAmount')}</span>
+                  </button>
+                </th>
+              )}
               <th className={`${thBase} text-right select-none`} aria-sort={getAriaSort('aicNetAmount')}>
                 <button type="button" className={`${sortBtn} justify-end`} onClick={() => handleSort('aicNetAmount')}>
                   <span>AIC Net Cost</span>
                   <span className="min-w-[2ch]" aria-hidden="true">{sortIndicator('aicNetAmount')}</span>
                 </button>
               </th>
-              <th className={`${thBase} text-right select-none`} aria-sort={getAriaSort('difference')}>
-                <button type="button" className={`${sortBtn} justify-end`} onClick={() => handleSort('difference')}>
-                  <span>Difference</span>
-                  <span className="min-w-[2ch]" aria-hidden="true">{sortIndicator('difference')}</span>
-                </button>
-              </th>
+              {!isNativeAiCredits && (
+                <th className={`${thBase} text-right select-none`} aria-sort={getAriaSort('difference')}>
+                  <button type="button" className={`${sortBtn} justify-end`} onClick={() => handleSort('difference')}>
+                    <span>Difference</span>
+                    <span className="min-w-[2ch]" aria-hidden="true">{sortIndicator('difference')}</span>
+                  </button>
+                </th>
+              )}
             </tr>
           </thead>
           <tbody>
@@ -410,14 +426,16 @@ export function UsersView({ users, seatOverrides = {}, onSeatOverridesChange, on
                   tabIndex={onSelectUser ? 0 : undefined}
                 >
                   <td className={`${td} font-semibold text-fg-default`}>{user.username}</td>
-                  <td className={tdNum}>{formatInt(user.totals.requests)}</td>
+                  {!isNativeAiCredits && <td className={tdNum}>{formatInt(user.totals.requests)}</td>}
                   <td className={tdNum}>{formatAic(user.totals.aicQuantity)}</td>
                   <td className={tdNum}>{formatInt(user.totals.distinctModels)}</td>
-                  <td className={tdNum}>{formatCost(user.totals.netAmount)}</td>
+                  {!isNativeAiCredits && <td className={tdNum}>{formatCost(user.totals.netAmount)}</td>}
                   <td className={tdNum}>{formatCost(user.totals.aicNetAmount)}</td>
-                  <td className={`${tdNum} font-semibold ${diff > 0 ? 'text-app-savings-fg' : diff < 0 ? 'text-app-overspend-fg' : 'text-fg-muted'}`}>
-                    {formatDifference(diff)}
-                  </td>
+                  {!isNativeAiCredits && (
+                    <td className={`${tdNum} font-semibold ${diff > 0 ? 'text-app-savings-fg' : diff < 0 ? 'text-app-overspend-fg' : 'text-fg-muted'}`}>
+                      {formatDifference(diff)}
+                    </td>
+                  )}
                 </tr>
               )
             })}

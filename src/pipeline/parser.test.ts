@@ -2,15 +2,15 @@ import { describe, expect, it } from 'vitest'
 import {
   getUsageMetrics,
   InvalidReportError,
+  normalizeNativeAiCreditsReportDate,
   normalizeTokenUsageRecord,
   parseCsvRow,
+  parseNativeAiCreditsUsageRecord,
   parseNormalizedTokenUsageRecord,
   parseTokenUsageHeader,
   parseTokenUsageRecord,
-  UnsupportedNativeAiCreditsReportError,
-  UnsupportedReportVersionError,
+  PreAiCreditsReportVersionError,
   validateHeader,
-  validateSupportedReportRecord,
 } from './parser'
 
 const FULL_HEADER = [
@@ -676,6 +676,134 @@ describe('parser and metric normalization', () => {
   })
 })
 
+describe('native AI Credits parsing helpers', () => {
+  it('normalizes native short dates to ISO dates', () => {
+    expect(normalizeNativeAiCreditsReportDate('5/29/26')).toBe('2026-05-29')
+    expect(normalizeNativeAiCreditsReportDate('05/09/2026')).toBe('2026-05-09')
+    expect(normalizeNativeAiCreditsReportDate('2026-05-29')).toBe('2026-05-29')
+  })
+
+  it('parses native AI Credits usage and cost fields without enabling pipeline support', () => {
+    const header = parseTokenUsageHeader(HEADER_WITHOUT_EXCEEDS_QUOTA)
+    const record = parseNativeAiCreditsUsageRecord(
+      buildRow([
+        '5/29/26',
+        'mona',
+        'copilot',
+        'copilot_ai_credit',
+        'Auto: Claude Haiku 4.5',
+        '96.9990345',
+        'ai-credits',
+        '0.01',
+        '0.969990345',
+        '0.15',
+        '0.819990345',
+        '3900',
+        'example-org',
+        'Cost Center A',
+        '96.9990345',
+        '0.969990345',
+      ]),
+      header,
+    )
+
+    expect(record).toMatchObject({
+      date: '2026-05-29',
+      username: 'mona',
+      product: 'copilot',
+      sku: 'copilot_ai_credit',
+      quantity: 96.9990345,
+      unit_type: 'ai-credits',
+      gross_amount: 0.969990345,
+      discount_amount: 0.15,
+      net_amount: 0.819990345,
+      total_monthly_quota: 3900,
+      organization: 'example-org',
+      cost_center_name: 'Cost Center A',
+      aic_quantity: 96.9990345,
+      aic_gross_amount: 0.969990345,
+      aic_net_amount: 0.819990345,
+      has_aic_quantity: true,
+      has_aic_gross_amount: true,
+    })
+  })
+
+  it('uses native quantity and cost fields as AIC aliases when alias columns are blank', () => {
+    const header = parseTokenUsageHeader(HEADER_WITHOUT_EXCEEDS_QUOTA)
+    const record = parseNativeAiCreditsUsageRecord(
+      buildRow([
+        '5/29/26',
+        'hubot',
+        'spark',
+        'spark_ai_credit',
+        'GPT-5.2',
+        '12.5',
+        'ai-credits',
+        '0.01',
+        '0.125',
+        '0.025',
+        '0.1',
+        '7000',
+        'octodemo',
+        '',
+        '',
+        '',
+      ]),
+      header,
+    )
+
+    expect(record).toMatchObject({
+      date: '2026-05-29',
+      quantity: 12.5,
+      gross_amount: 0.125,
+      discount_amount: 0.025,
+      net_amount: 0.1,
+      aic_quantity: 12.5,
+      aic_gross_amount: 0.125,
+      aic_net_amount: 0.1,
+      has_aic_quantity: true,
+      has_aic_gross_amount: true,
+    })
+  })
+
+  it('keeps native quantity and cost fields authoritative when alias columns differ', () => {
+    const header = parseTokenUsageHeader(HEADER_WITHOUT_EXCEEDS_QUOTA)
+    const record = parseNativeAiCreditsUsageRecord(
+      buildRow([
+        '5/29/26',
+        'octocat',
+        'copilot',
+        'copilot_ai_credit',
+        'GPT-5.2',
+        '50',
+        'ai-credits',
+        '0.01',
+        '0.50',
+        '0.20',
+        '0.30',
+        '3900',
+        'example-org',
+        'Cost Center A',
+        '75',
+        '0.75',
+      ]),
+      header,
+    )
+
+    expect(record).toMatchObject({
+      quantity: 50,
+      gross_amount: 0.5,
+      discount_amount: 0.2,
+      net_amount: 0.3,
+      aic_quantity: 50,
+      aic_gross_amount: 0.5,
+      aic_net_amount: 0.3,
+      has_aic_quantity: true,
+      has_aic_gross_amount: true,
+    })
+  })
+})
+
 describe('validateHeader', () => {
   it('accepts a header that contains all required columns', () => {
     const header = parseTokenUsageHeader(FULL_HEADER)
@@ -692,8 +820,8 @@ describe('validateHeader', () => {
     expect(() => validateHeader(header)).toThrow(InvalidReportError)
   })
 
-  it('throws UnsupportedReportVersionError when only aic columns are missing', () => {
-    const legacyHeader = [
+  it('throws PreAiCreditsReportVersionError when only aic columns are missing', () => {
+    const preAicHeader = [
       'date',
       'username',
       'product',
@@ -710,12 +838,12 @@ describe('validateHeader', () => {
       'organization',
       'cost_center_name',
     ].join(',')
-    const header = parseTokenUsageHeader(legacyHeader)
-    expect(() => validateHeader(header)).toThrow(UnsupportedReportVersionError)
+    const header = parseTokenUsageHeader(preAicHeader)
+    expect(() => validateHeader(header)).toThrow(PreAiCreditsReportVersionError)
   })
 
-  it('throws UnsupportedReportVersionError when only one aic column is missing', () => {
-    const legacyHeader = [
+  it('throws PreAiCreditsReportVersionError when only one aic column is missing', () => {
+    const preAicHeader = [
       'date',
       'username',
       'product',
@@ -733,8 +861,8 @@ describe('validateHeader', () => {
       'cost_center_name',
       'aic_quantity',
     ].join(',')
-    const header = parseTokenUsageHeader(legacyHeader)
-    expect(() => validateHeader(header)).toThrow(UnsupportedReportVersionError)
+    const header = parseTokenUsageHeader(preAicHeader)
+    expect(() => validateHeader(header)).toThrow(PreAiCreditsReportVersionError)
   })
 
   it('throws InvalidReportError when a billing header omits a required non-aic billing column', () => {
@@ -759,64 +887,5 @@ describe('validateHeader', () => {
     ].join(',')
     const header = parseTokenUsageHeader(incompleteBillingHeader)
     expect(() => validateHeader(header)).toThrow(InvalidReportError)
-  })
-})
-
-describe('validateSupportedReportRecord', () => {
-  it('throws a clear error for the native AI Credits report format', () => {
-    const header = parseTokenUsageHeader(HEADER_WITHOUT_EXCEEDS_QUOTA)
-    const record = parseTokenUsageRecord(
-      buildRow([
-        '5/29/26',
-        'mona',
-        'copilot',
-        'copilot_ai_credit',
-        'Auto: Claude Haiku 4.5',
-        '96.9990345',
-        'ai-credits',
-        '0.01',
-        '0.969990345',
-        '0',
-        '0.969990345',
-        '3900',
-        'example-org',
-        '',
-        '96.9990345',
-        '0.969990345',
-      ]),
-      header,
-    )
-
-    expect(() => validateSupportedReportRecord(header, record)).toThrow(UnsupportedNativeAiCreditsReportError)
-    expect(() => validateSupportedReportRecord(header, record)).toThrow(
-      'currently supports PRU vs usage-based billing reports generated for the April and May billing periods',
-    )
-  })
-
-  it('accepts PRU report rows when exceeds_quota is absent', () => {
-    const header = parseTokenUsageHeader(HEADER_WITHOUT_EXCEEDS_QUOTA)
-    const record = parseTokenUsageRecord(
-      buildRow([
-        '2026-05-29',
-        'mona',
-        'copilot',
-        'copilot_premium_request',
-        'Auto: Claude Haiku 4.5',
-        '2',
-        'requests',
-        '0.04',
-        '0.08',
-        '0',
-        '0.08',
-        '300',
-        'example-org',
-        'Cost Center A',
-        '20',
-        '0.20',
-      ]),
-      header,
-    )
-
-    expect(() => validateSupportedReportRecord(header, record)).not.toThrow()
   })
 })

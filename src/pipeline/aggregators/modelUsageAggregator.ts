@@ -1,6 +1,8 @@
 import type { Aggregator } from './base'
-import { getUsageMetrics, type TokenUsageHeader, type TokenUsageRecord } from '../parser'
+import type { TokenUsageHeader, TokenUsageRecord } from '../parser'
 import { getDisplayModelName } from '../modelLabels'
+import type { ReportFormat, ReportFormatMetadata } from '../reportAdapters'
+import { getAggregatorReportFormat, getAggregatorUsageMetrics } from './usageMetrics'
 
 export type ModelDailyUsageData = {
   date: string
@@ -54,6 +56,11 @@ function ensureDay(model: ModelInternal, date: string): ModelDailyUsageData {
 
 export class ModelUsageAggregator implements Aggregator<TokenUsageRecord, ModelUsageResult, TokenUsageHeader> {
   private byModel = new Map<string, ModelInternal>()
+  private readonly reportFormat: ReportFormat
+
+  constructor(reportMetadataOrFormat?: ReportFormat | ReportFormatMetadata) {
+    this.reportFormat = getAggregatorReportFormat(reportMetadataOrFormat)
+  }
 
   onHeader(): void {
     // header is intentionally ignored (we rely on parsed TokenUsageRecord fields)
@@ -82,7 +89,7 @@ export class ModelUsageAggregator implements Aggregator<TokenUsageRecord, ModelU
       this.byModel.set(modelName, model)
     }
 
-    const { requests, aicQuantity, grossAmount, aicGrossAmount, aicNetAmount, discountAmount, netAmount } = getUsageMetrics(record)
+    const { requests, aicQuantity, grossAmount, aicGrossAmount, aicNetAmount, discountAmount, netAmount } = getAggregatorUsageMetrics(record, this.reportFormat)
 
     const day = ensureDay(model, date)
     day.requests += requests

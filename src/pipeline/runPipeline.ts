@@ -1,18 +1,28 @@
 import type { Aggregator } from './aggregators/base'
-import { createAicIncludedCreditsAllocator, type AicIncludedCreditsOverrides } from './aicIncludedCredits'
 import {
+  calculateAicIncludedCreditsContext,
+  createAicIncludedCreditsAllocatorFromContext,
+  type AicIncludedCreditsOverrides,
+} from './aicIncludedCredits'
+import type { IncludedCreditsPolicy } from './includedCreditsPolicy'
+import {
+  InvalidReportError,
   parseTokenUsageHeader,
-  parseNormalizedTokenUsageRecord,
   parseTokenUsageRecord,
-  validateSupportedReportRecord,
-  validateHeader,
   type TokenUsageHeader,
   type TokenUsageRecord,
 } from './parser'
+import {
+  validateUsageReportFirstRecord,
+  validateUsageReportHeader,
+  type ReportFormatMetadata,
+  type UsageReportAdapter,
+} from './reportAdapters'
 import { streamLines, type StreamProgress } from './streamer'
 
-async function validateFileFormat(file: File): Promise<void> {
+async function validateFileFormat(file: File): Promise<UsageReportAdapter> {
   let header: TokenUsageHeader | null = null
+  let selectedAdapter: UsageReportAdapter | null = null
 
   for await (const line of streamLines(file)) {
     const trimmed = line.trimEnd()
@@ -22,13 +32,18 @@ async function validateFileFormat(file: File): Promise<void> {
 
     if (!header) {
       header = parseTokenUsageHeader(trimmed)
-      validateHeader(header)
+      selectedAdapter = validateUsageReportHeader(header)
       continue
     }
 
-    validateSupportedReportRecord(header, parseTokenUsageRecord(trimmed, header))
-    return
+    return validateUsageReportFirstRecord(header, parseTokenUsageRecord(trimmed, header))
   }
+
+  if (!selectedAdapter) {
+    throw new InvalidReportError()
+  }
+
+  return selectedAdapter
 }
 
 export interface PipelineProgress {
@@ -46,9 +61,17 @@ export interface PipelineOptions {
 }
 
 export interface PipelineResult {
+  reportMetadata: ReportFormatMetadata
   reportRowCount: number
   processedRowCount: number
 }
+
+export type PipelineAggregators =
+  | Aggregator<TokenUsageRecord, unknown, TokenUsageHeader>[]
+  | ((
+    reportMetadata: ReportFormatMetadata,
+    includedCreditsPolicy: IncludedCreditsPolicy,
+  ) => Aggregator<TokenUsageRecord, unknown, TokenUsageHeader>[])
 
 const ANALYSIS_PROGRESS_WEIGHT = 0.4
 const MIN_PROGRESS_INCREMENT_PERCENT = 1
@@ -75,11 +98,16 @@ function getNow(): number {
 
 export async function runPipeline(
   file: File,
-  aggregators: Aggregator<TokenUsageRecord, unknown, TokenUsageHeader>[],
+  aggregatorsOrFactory: PipelineAggregators,
   options?: PipelineOptions,
 ): Promise<PipelineResult> {
-  const { includedCreditsOverrides = {}, progressResolution = 500, onProgress } = options ?? {}
-  await validateFileFormat(file)
+  const {
+    includedCreditsOverrides = {},
+    progressResolution = 500,
+    onProgress,
+  } = options ?? {}
+  const reportAdapter = await validateFileFormat(file)
+  const reportMetadata = reportAdapter.metadata
   let lastProgressStage: PipelineProgress['stage'] | null = null
   let lastProgressPercent = -1
   let lastProgressTimestamp = 0
@@ -125,11 +153,16 @@ export async function runPipeline(
     return true
   }
 
-  const aicIncludedCreditAllocator = await createAicIncludedCreditsAllocator(file, includedCreditsOverrides, {
+  const includedCreditsContext = await calculateAicIncludedCreditsContext(file, includedCreditsOverrides, {
+    reportMetadata,
     onProgress: (streamProgress) => {
       emitProgress('analyzing', 0, streamProgress)
     },
   })
+  const aggregators = typeof aggregatorsOrFactory === 'function'
+    ? aggregatorsOrFactory(reportMetadata, includedCreditsContext.includedCreditsPolicy)
+    : aggregatorsOrFactory
+  const aicIncludedCreditAllocator = createAicIncludedCreditsAllocatorFromContext(includedCreditsContext)
   let header: TokenUsageHeader | null = null
   let reportRowCount = 0
   let rowIndex = 0
@@ -153,7 +186,7 @@ export async function runPipeline(
       continue
     }
 
-    const normalizedRecord = parseNormalizedTokenUsageRecord(trimmed, header)
+    const normalizedRecord = reportAdapter.parseRecord(trimmed, header)
     reportRowCount += 1
     if (!normalizedRecord) continue
 
@@ -180,6 +213,7 @@ export async function runPipeline(
   }
 
   return {
+    reportMetadata,
     reportRowCount,
     processedRowCount: rowIndex,
   }

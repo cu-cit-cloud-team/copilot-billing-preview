@@ -8,6 +8,7 @@ import type { BudgetField, BudgetValues } from '../utils/costManagementBudgets'
 import type { DailyUsageData } from '../pipeline/aggregators/dailyUsageAggregator'
 import { formatAic, formatUsd } from '../utils/format'
 import type { IndividualPlanUpgradeRecommendation } from '../utils/individualPlanUpgrade'
+import { isNativeAiCreditsMode, type ReportMode } from '../utils/reportMode'
 import { th, thNum, td, tdNum } from '../components/ui/tableStyles'
 
 type CostManagementViewProps = {
@@ -34,19 +35,21 @@ type CostManagementViewProps = {
   isApplyingBudgetSimulation: boolean
   onBudgetValueChange: (field: BudgetField, value: string) => void
   onApplyBudgetSimulation: () => void
+  reportMode?: ReportMode
+  showOrganizationPromotionalDataDisclaimer?: boolean
 }
 
 const ACCOUNT_BUDGET_FIELD: { field: BudgetField; label: string; description: string } = {
   field: 'account',
   label: 'Account-level budget',
-  description: 'Controls additional spend only for the current billing period.\nDoes not impact included credits.',
+  description: 'Controls additional AI Credits spend only for the current billing period.\nDoes not impact included credits.',
 }
 
 const USER_BUDGET_FIELDS: Array<{ field: BudgetField; label: string; description: string }> = [
   {
     field: 'user',
     label: 'Universal user-level budget',
-    description: 'Default per-user limit for cumulative AIC gross cost.',
+    description: 'Default per-user limit for cumulative AI Credits gross cost.',
   },
   {
     field: 'heavyUser',
@@ -64,7 +67,7 @@ const INDIVIDUAL_BUDGET_FIELDS: Array<{ field: BudgetField; label: string; descr
   {
     field: 'account',
     label: 'Additional usage budget',
-    description: 'Controls additional usage spend only for the current billing period.\nDoes not impact included credits.',
+    description: 'Controls additional AI Credits usage spend only for the current billing period.\nDoes not impact included credits.',
   },
 ]
 
@@ -72,17 +75,17 @@ const PRODUCT_BUDGET_FIELDS: Array<{ field: BudgetField; label: string; descript
   {
     field: 'productCloudAgent',
     label: PRODUCT_BUDGET_COPILOT_CLOUD_AGENT,
-    description: 'Applies only to additional AIC spend for Copilot Cloud Agent usage.',
+    description: 'Applies only to additional AI Credits spend for Copilot Cloud Agent usage.',
   },
   {
     field: 'productSpark',
     label: PRODUCT_BUDGET_SPARK,
-    description: 'Applies only to additional AIC spend for Spark usage.',
+    description: 'Applies only to additional AI Credits spend for Spark usage.',
   },
   {
     field: 'productCopilot',
     label: PRODUCT_BUDGET_COPILOT,
-    description: 'Applies only to additional AIC spend for Copilot usage.',
+    description: 'Applies only to additional AI Credits spend for Copilot usage.',
   },
 ]
 
@@ -146,7 +149,10 @@ export function CostManagementView({
   isApplyingBudgetSimulation,
   onBudgetValueChange,
   onApplyBudgetSimulation,
+  reportMode = 'transition-period-billing-preview',
+  showOrganizationPromotionalDataDisclaimer = true,
 }: CostManagementViewProps) {
+  const isNativeAiCredits = isNativeAiCreditsMode(reportMode)
   const visibleAccountBudgetFields = isIndividualReport ? INDIVIDUAL_BUDGET_FIELDS : [ACCOUNT_BUDGET_FIELD]
   const hasVisibleBudgetValue = visibleAccountBudgetFields.some(({ field }) => budgetValues[field].trim() !== '')
     || (!isIndividualReport && USER_BUDGET_FIELDS.some(({ field }) => budgetValues[field].trim() !== ''))
@@ -212,12 +218,21 @@ export function CostManagementView({
     currentAicQuantity,
     licenseAmount,
   ])
+  const blockedUsageValue = budgetSimulation
+    ? isNativeAiCredits
+      ? formatAic(Math.max(currentAicQuantity - budgetSimulation.allowedAicQuantity, 0))
+      : budgetSimulation.blockedRequests.toLocaleString()
+    : '0'
 
   return (
     <section className="flex flex-col gap-6" aria-label="Cost management">
       <div className="flex flex-col gap-1">
         <h2 className="m-0 text-lg text-fg-default">Cost management</h2>
-        <p className="m-0 text-[13px] text-fg-muted">Set USD budgets and preview how they would affect the uploaded report.</p>
+        <p className="m-0 text-[13px] text-fg-muted">
+          {isNativeAiCredits
+            ? 'Set USD budgets and preview how they would affect usage-based billing for this report.'
+            : 'Set USD budgets and preview how they would affect the uploaded report.'}
+        </p>
       </div>
 
       <BillingTotalsCards
@@ -233,7 +248,9 @@ export function CostManagementView({
         licenseSeatCounts={licenseSeatCounts}
         showExistingDiscountDisclaimer={!isIndividualReport}
         showPromotionalDataDisclaimer={isIndividualReport}
+        showOrganizationPromotionalDataDisclaimer={!isIndividualReport && showOrganizationPromotionalDataDisclaimer}
         upgradeRecommendation={upgradeRecommendation}
+        reportMode={reportMode}
       />
 
       <div className="grid grid-cols-1 gap-4">
@@ -267,10 +284,10 @@ export function CostManagementView({
           <div className="flex flex-col gap-1">
             <strong className="text-sm font-semibold text-fg-default">User-level budgets</strong>
             <p className="m-0 text-[13px] text-fg-muted">
-              These budgets apply per user to cumulative AIC gross cost. Heavy and Power budgets replace the universal budget for users classified into those groups.
+              These budgets apply per user to cumulative AI Credits gross cost. Heavy and Power budgets replace the universal budget for users classified into those groups.
             </p>
             <p className="m-0 text-[13px] text-fg-muted">
-              Values are prepopulated from the average AIC gross cost for the spending groups identified in the <strong className="text-fg-default">Spend Insights</strong> section.
+              Values are prepopulated from the average AI Credits gross cost for the spending groups identified in the <strong className="text-fg-default">Spend Insights</strong> section.
             </p>
           </div>
 
@@ -307,7 +324,7 @@ export function CostManagementView({
           <div className="flex flex-col gap-1">
             <strong className="text-sm font-semibold text-fg-default">Product-level budgets</strong>
             <p className="m-0 text-[13px] text-fg-muted">
-              These budgets apply only to <strong className="text-fg-default">AIC additional spend</strong>. Included credits can still be used before additional spend blocking starts.
+              These budgets apply only to <strong className="text-fg-default">AI Credits additional spend</strong>. Included credits can still be used before additional spend blocking starts.
             </p>
           </div>
 
@@ -343,8 +360,8 @@ export function CostManagementView({
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <p className="m-0 text-[13px] text-fg-muted">
             {isIndividualReport
-              ? <>The simulation applies the <strong className="text-fg-default">additional usage budget</strong> against total paid AIC additional spend after included credits are used.</>
-               : <>The simulation applies <strong className="text-fg-default">User-level budgets</strong> per user to cumulative AIC gross cost, the <strong className="text-fg-default">account-level budget</strong> to total paid AIC additional spend, and <strong className="text-fg-default">product-level budgets</strong> to additional spend for each product bucket. The first limit reached blocks later requests for that scope.</>}
+              ? <>The simulation applies the <strong className="text-fg-default">additional usage budget</strong> against total paid AI Credits additional spend after included credits are used.</>
+               : <>The simulation applies <strong className="text-fg-default">User-level budgets</strong> per user to cumulative AI Credits gross cost, the <strong className="text-fg-default">account-level budget</strong> to total paid AI Credits additional spend, and <strong className="text-fg-default">product-level budgets</strong> to additional spend for each product bucket. The first limit reached blocks later {isNativeAiCredits ? 'usage' : 'requests'} for that scope.</>}
           </p>
           <button
             type="button"
@@ -374,15 +391,15 @@ export function CostManagementView({
                 <div key={card.label} className="bg-bg-default border border-border-default rounded-md px-5 py-[28px] text-center">
                   <div className="text-[13px] font-medium text-fg-muted uppercase tracking-[0.5px] mb-3">{card.label}</div>
                   <div className="text-4xl font-bold leading-[1.2] text-app-savings-fg">{formatUsd(card.totalAmount)}</div>
-                  <div className="text-sm text-fg-default mt-[6px]">{formatAic(card.aicQuantity)} AICs</div>
-                  <div className="text-xs text-fg-muted mt-1">1 AIC = $0.01</div>
+                  <div className="text-sm text-fg-default mt-[6px]">{formatAic(card.aicQuantity)} AI Credits</div>
+                  <div className="text-xs text-fg-muted mt-1">1 AI Credit = $0.01</div>
                   <div className="mt-4 pt-3 border-t border-border-default w-full flex flex-col gap-[6px] text-left">
                     <div className="flex justify-between items-center text-[13px] text-fg-default tabular-nums">
-                      <span>Consumed AICs</span>
+                      <span>Consumed AI Credits</span>
                       <span>{formatUsd(card.grossAmount)}</span>
                     </div>
                     <div className="flex justify-between items-center text-[13px] text-fg-muted tabular-nums">
-                      <span>Included AICs</span>
+                      <span>Included AI Credits</span>
                       <span>−{formatUsd(card.includedAmount)}</span>
                     </div>
                     <div className="pt-[6px] border-t border-dotted border-border-muted flex flex-col gap-[6px]">
@@ -411,16 +428,16 @@ export function CostManagementView({
             </div>
 
             <p className="m-0 text-center text-[13px] text-fg-muted">
-              Simulated AIC additional usage spend: <strong className="text-fg-default">{formatUsd(budgetSimulation.totalBill)}</strong> with the configured budgets applied.
+              Simulated AI Credits additional usage spend: <strong className="text-fg-default">{formatUsd(budgetSimulation.totalBill)}</strong> with the configured budgets applied.
             </p>
 
             {cumulativeSimulationSeries && cumulativeSimulationSeries.labels.length > 0 && (
               <DualAxisLineChart
-                title="Cumulative AIC gross cost: current vs simulated"
+                title="Cumulative AI Credits gross cost: current vs simulated"
                 labels={cumulativeSimulationSeries.labels}
                 series={[
                   {
-                    label: 'Current AIC gross cost',
+                    label: 'Current AI Credits gross cost',
                     legendOrder: 3,
                     color: CURRENT_GROSS_COST_COLOR,
                     data: cumulativeSimulationSeries.current,
@@ -428,7 +445,7 @@ export function CostManagementView({
                     order: 2,
                   },
                   {
-                    label: 'Simulated AIC gross cost',
+                    label: 'Simulated AI Credits gross cost',
                     legendLabel: 'Simulated - within included pool',
                     legendOrder: 1,
                     color: SIMULATED_INCLUDED_COLOR,
@@ -518,12 +535,12 @@ export function CostManagementView({
                       </tr>
                     )}
                     <tr>
-                      <td className={td}>Blocked PRUs</td>
-                      <td className={`${tdNum} font-semibold text-fg-default`}>{budgetSimulation.blockedRequests.toLocaleString()}</td>
+                      <td className={td}>{isNativeAiCredits ? 'Blocked AI Credits' : 'Blocked PRUs'}</td>
+                      <td className={`${tdNum} font-semibold text-fg-default`}>{blockedUsageValue}</td>
                     </tr>
                     {!isIndividualReport && (
                       <tr>
-                        <td className={td}>Included credits blocked by user budgets</td>
+                        <td className={td}>Included AI Credits blocked by user budgets</td>
                         <td className={`${tdNum} font-semibold text-fg-default`}>{formatAic(budgetSimulation.blockedIncludedCreditsAic)}</td>
                       </tr>
                     )}

@@ -117,6 +117,8 @@ const BASE_BILLING_COLUMNS = [
 const REQUIRED_AIC_COLUMNS = ['aic_quantity', 'aic_gross_amount'] as const
 const APRIL_BACKFILL_START_DATE = '2026-04-24'
 const APRIL_BACKFILL_END_DATE = '2026-04-30'
+const ISO_DATE_PATTERN = /^(\d{4})-(\d{2})-(\d{2})$/
+const SLASH_DATE_PATTERN = /^(\d{1,2})\/(\d{1,2})\/(\d{2}|\d{4})$/
 
 export class InvalidReportError extends Error {
   constructor() {
@@ -128,46 +130,36 @@ export class InvalidReportError extends Error {
   }
 }
 
-export class UnsupportedReportVersionError extends Error {
+export class PreAiCreditsReportVersionError extends Error {
   constructor() {
     super(
       `This report was exported before usage-based billing was introduced and cannot be displayed. ` +
         `Please upload a more recent report that includes the AI Credits columns.`,
     )
-    this.name = 'UnsupportedReportVersionError'
+    this.name = 'PreAiCreditsReportVersionError'
   }
 }
 
-export class UnsupportedNativeAiCreditsReportError extends Error {
-  constructor() {
-    super(
-      `This billing preview app currently supports PRU vs usage-based billing reports generated for ` +
-        `the April and May billing periods. Reports generated on or after June 1 use AI Credits as ` +
-        `the primary unit and are not supported yet.`,
-    )
-    this.name = 'UnsupportedNativeAiCreditsReportError'
-  }
-}
-
-export function validateHeader(header: TokenUsageHeader): void {
+export function validateBaseHeader(header: TokenUsageHeader): void {
   const missingBase = BASE_BILLING_COLUMNS.filter((col) => !(col in header.index))
   if (missingBase.length > 0) {
     throw new InvalidReportError()
   }
+}
 
+export function validateHeader(header: TokenUsageHeader): void {
+  validateBaseHeader(header)
   const missingAic = REQUIRED_AIC_COLUMNS.filter((col) => !(col in header.index))
   if (missingAic.length > 0) {
-    throw new UnsupportedReportVersionError()
+    throw new PreAiCreditsReportVersionError()
   }
 }
 
-export function validateSupportedReportRecord(header: TokenUsageHeader, record: TokenUsageRecord): void {
+export function hasNativeAiCreditsReportSignature(header: TokenUsageHeader, record: TokenUsageRecord): boolean {
   const lacksExceedsQuota = !('exceeds_quota' in header.index)
   const usesNativeAiCreditsUnit = record.unit_type === 'ai-credits' && record.sku.endsWith('_ai_credit')
 
-  if (lacksExceedsQuota && usesNativeAiCreditsUnit) {
-    throw new UnsupportedNativeAiCreditsReportError()
-  }
+  return lacksExceedsQuota && usesNativeAiCreditsUnit
 }
 
 function stripBom(s: string): string {
@@ -277,6 +269,60 @@ export function parseTokenUsageRecord(line: string, header: TokenUsageHeader): T
 
   record.aic_net_amount = getAicUsageMetrics(record).aicGrossAmount
   return record
+}
+
+function isValidDateParts(year: number, month: number, day: number): boolean {
+  const date = new Date(Date.UTC(year, month - 1, day))
+  return (
+    date.getUTCFullYear() === year
+    && date.getUTCMonth() === month - 1
+    && date.getUTCDate() === day
+  )
+}
+
+function formatIsoDate(year: number, month: number, day: number): string {
+  return [
+    String(year).padStart(4, '0'),
+    String(month).padStart(2, '0'),
+    String(day).padStart(2, '0'),
+  ].join('-')
+}
+
+export function normalizeNativeAiCreditsReportDate(rawDate: string): string {
+  const date = rawDate.trim()
+  const isoMatch = ISO_DATE_PATTERN.exec(date)
+  if (isoMatch) {
+    const year = Number(isoMatch[1])
+    const month = Number(isoMatch[2])
+    const day = Number(isoMatch[3])
+    return isValidDateParts(year, month, day) ? date : rawDate.trim()
+  }
+
+  const slashMatch = SLASH_DATE_PATTERN.exec(date)
+  if (!slashMatch) return date
+
+  const month = Number(slashMatch[1])
+  const day = Number(slashMatch[2])
+  const yearRaw = slashMatch[3]
+  const year = yearRaw.length === 2 ? 2000 + Number(yearRaw) : Number(yearRaw)
+
+  if (!isValidDateParts(year, month, day)) return date
+  return formatIsoDate(year, month, day)
+}
+
+export function parseNativeAiCreditsUsageRecord(line: string, header: TokenUsageHeader): TokenUsageRecord {
+  const record = parseTokenUsageRecord(line, header)
+  const nativeRecord: TokenUsageRecord = {
+    ...record,
+    date: normalizeNativeAiCreditsReportDate(record.date),
+    aic_quantity: record.quantity,
+    aic_gross_amount: record.gross_amount,
+    aic_net_amount: record.net_amount,
+    has_aic_quantity: true,
+    has_aic_gross_amount: true,
+  }
+
+  return nativeRecord
 }
 
 function isAprilBackfillDate(date: string): boolean {

@@ -26,18 +26,19 @@ import { CostCenterAggregator, type CostCenterResult } from './pipeline/aggregat
 import { OrganizationAggregator, type OrganizationResult } from './pipeline/aggregators/organizationAggregator'
 import { UserUsageAggregator, type UserUsageResult } from './pipeline/aggregators/userUsageAggregator'
 import {
-  BUSINESS_MONTHLY_AIC_INCLUDED_CREDITS,
-  ENTERPRISE_MONTHLY_AIC_INCLUDED_CREDITS,
   calculateLicenseSummary,
   inferReportPlanScope,
   type AicIncludedCreditsOverrides,
 } from './pipeline/aicIncludedCredits'
+import { resolveIncludedCreditsPolicy } from './pipeline/includedCreditsPolicy'
 import { PRODUCT_BUDGET_COPILOT, PRODUCT_BUDGET_COPILOT_CLOUD_AGENT, PRODUCT_BUDGET_SPARK } from './pipeline/productClassification'
 import { runPipeline } from './pipeline/runPipeline'
+import type { ReportFormatMetadata } from './pipeline/reportAdapters'
 import { runBudgetSimulation, type BudgetSimulationResult } from './utils/budgetSimulation'
 import { EMPTY_BUDGET_VALUES, getDefaultBudgetValues, getUserSpendSegmentsByUsername, type BudgetField, type BudgetValues } from './utils/costManagementBudgets'
 import { calculateIndividualPlanUpgradeRecommendation, getIndividualLicenseMonthlyCost } from './utils/individualPlanUpgrade'
 import { normalizeSeatCount } from './utils/seatCounts'
+import { getReportMode, isNativeAiCreditsMode } from './utils/reportMode'
 import { useAppVersionCheck } from './hooks/useAppVersionCheck'
 
 type Status = 'idle' | 'processing' | 'done'
@@ -49,6 +50,7 @@ const ENTERPRISE_LICENSE_MONTHLY_COST = 39
 function App() {
   const [status, setStatus] = useState<Status>('idle')
   const [quickStats, setQuickStats] = useState<QuickStatsResult | null>(null)
+  const [reportMetadata, setReportMetadata] = useState<ReportFormatMetadata | null>(null)
   const [reportContext, setReportContext] = useState<ReportContextResult | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [fileName, setFileName] = useState<string | null>(null)
@@ -79,6 +81,7 @@ function App() {
 
   const applyProcessedData = useCallback(({
     quickStats,
+    reportMetadata,
     reportContext,
     dailyUsageData,
     modelUsage,
@@ -88,6 +91,7 @@ function App() {
     userUsage,
   }: {
     quickStats: QuickStatsResult
+    reportMetadata: ReportFormatMetadata
     reportContext: ReportContextResult
     dailyUsageData: DailyUsageData[]
     modelUsage: ModelUsageResult
@@ -97,6 +101,7 @@ function App() {
     userUsage: UserUsageResult
   }) => {
     setQuickStats(quickStats)
+    setReportMetadata(reportMetadata)
     setReportContext(reportContext)
     setDailyUsageData(dailyUsageData)
     setModelUsage(modelUsage)
@@ -111,25 +116,36 @@ function App() {
     includedCreditsOverrides: AicIncludedCreditsOverrides = {},
     onProgress?: (progressInfo: { rowsProcessed: number; progressPercent: number }) => void,
   ) => {
-    const statsAggregator = new QuickStatsAggregator()
-    const contextAggregator = new ReportContextAggregator()
-    const dailyAggregator = new DailyUsageAggregator()
-    const modelAggregator = new ModelUsageAggregator()
-    const productAggregator = new ProductUsageAggregator()
-    const costCenterAggregator = new CostCenterAggregator()
-    const orgAggregator = new OrganizationAggregator()
-    const userAggregator = new UserUsageAggregator()
+    let statsAggregator!: QuickStatsAggregator
+    let contextAggregator!: ReportContextAggregator
+    let dailyAggregator!: DailyUsageAggregator
+    let modelAggregator!: ModelUsageAggregator
+    let productAggregator!: ProductUsageAggregator
+    let costCenterAggregator!: CostCenterAggregator
+    let orgAggregator!: OrganizationAggregator
+    let userAggregator!: UserUsageAggregator
 
-    const pipelineResult = await runPipeline(file, [
-      statsAggregator,
-      contextAggregator,
-      dailyAggregator,
-      modelAggregator,
-      productAggregator,
-      costCenterAggregator,
-      orgAggregator,
-      userAggregator,
-    ], {
+    const pipelineResult = await runPipeline(file, (reportMetadata, includedCreditsPolicy) => {
+      statsAggregator = new QuickStatsAggregator()
+      contextAggregator = new ReportContextAggregator()
+      dailyAggregator = new DailyUsageAggregator(reportMetadata)
+      modelAggregator = new ModelUsageAggregator(reportMetadata)
+      productAggregator = new ProductUsageAggregator(reportMetadata)
+      costCenterAggregator = new CostCenterAggregator(reportMetadata)
+      orgAggregator = new OrganizationAggregator(reportMetadata)
+      userAggregator = new UserUsageAggregator(reportMetadata, includedCreditsPolicy)
+
+      return [
+        statsAggregator,
+        contextAggregator,
+        dailyAggregator,
+        modelAggregator,
+        productAggregator,
+        costCenterAggregator,
+        orgAggregator,
+        userAggregator,
+      ]
+    }, {
       includedCreditsOverrides,
       progressResolution: 500,
       onProgress,
@@ -140,6 +156,7 @@ function App() {
         ...statsAggregator.result(),
         lineCount: pipelineResult.reportRowCount,
       },
+      reportMetadata: pipelineResult.reportMetadata,
       reportContext: contextAggregator.result(),
       dailyUsageData: dailyAggregator.result().dailyData,
       modelUsage: modelAggregator.result(),
@@ -150,8 +167,16 @@ function App() {
     }
   }, [])
 
+  const reportMode = getReportMode(reportMetadata)
+  const isNativeAiCreditsReport = isNativeAiCreditsMode(reportMode)
+  const rangeStart = reportContext?.startDate ?? null
+  const rangeEnd = reportContext?.endDate ?? null
+  const includedCreditsPolicy = resolveIncludedCreditsPolicy(reportMode, { startDate: rangeStart, endDate: rangeEnd })
+  const showOrganizationPromotionalDataDisclaimer = reportMode === 'transition-period-billing-preview'
+    || includedCreditsPolicy.id === 'native-ai-credits-summer-promo'
+
   const getDefaultSeatCounts = useCallback(() => {
-    const summary = calculateLicenseSummary(userUsage?.users ?? [])
+    const summary = calculateLicenseSummary(userUsage?.users ?? [], includedCreditsPolicy)
     return {
       business: normalizeSeatCount(
         summary.rows.find((row) => row.label === 'Copilot Business')?.users ?? 0,
@@ -162,12 +187,13 @@ function App() {
         0,
       ),
     }
-  }, [userUsage])
+  }, [includedCreditsPolicy, userUsage])
 
   const resetReportState = useCallback(({ status, fileName }: { status: Status; fileName: string | null }) => {
     setStatus(status)
     setError(null)
     setQuickStats(null)
+    setReportMetadata(null)
     setReportContext(null)
     setDailyUsageData([])
     setUserUsage(null)
@@ -396,6 +422,7 @@ function App() {
           },
         },
         resolveIncludedCreditOverrides(seatOverrides),
+        { reportMetadata: reportMetadata ?? undefined },
       )
 
       if (simulationId !== latestSimulationIdRef.current) return
@@ -417,6 +444,7 @@ function App() {
     budgetValues.productCopilot,
     budgetValues.productSpark,
     budgetValues.user,
+    reportMetadata,
     resolveIncludedCreditOverrides,
     seatOverrides,
     userUsage,
@@ -476,10 +504,8 @@ function App() {
     }
   }
 
-  const hasReport = status === 'done' && fileName !== null
+  const hasReport = status === 'done' && fileName !== null && reportMetadata !== null
   const showSeatConfirmation = hasReport && seatConfirmationPending
-  const rangeStart = reportContext?.startDate ?? null
-  const rangeEnd = reportContext?.endDate ?? null
   const reportUsers = userUsage?.users ?? []
   const hasOrganizationContext = reportUsers.some((user) => user.organizations.length > 0 || user.costCenters.length > 0)
   const reportPlanScope = inferReportPlanScope(reportUsers.length, hasOrganizationContext)
@@ -492,21 +518,24 @@ function App() {
   const licenseAmount = reportPlanScope === 'organization'
     ? organizationLicenseAmount || undefined
     : individualUser
-      ? getIndividualLicenseMonthlyCost(individualUser.totalMonthlyQuota)
+      ? getIndividualLicenseMonthlyCost(individualUser.totalMonthlyQuota, includedCreditsPolicy)
       : undefined
   const licenseSeatCounts = reportPlanScope === 'organization'
     ? { business: effectiveBusinessSeats, enterprise: effectiveEnterpriseSeats }
     : undefined
   const includedAicPoolSize = reportPlanScope === 'organization'
-    ? (effectiveBusinessSeats * BUSINESS_MONTHLY_AIC_INCLUDED_CREDITS) + (effectiveEnterpriseSeats * ENTERPRISE_MONTHLY_AIC_INCLUDED_CREDITS)
-    : calculateLicenseSummary(reportUsers).totalIncludedAic
+    ? (effectiveBusinessSeats * includedCreditsPolicy.organizationPlans.business.monthlyIncludedCredits) + (effectiveEnterpriseSeats * includedCreditsPolicy.organizationPlans.enterprise.monthlyIncludedCredits)
+    : calculateLicenseSummary(reportUsers, includedCreditsPolicy).totalIncludedAic
 
   const selectedUser = individualUser
     ?? (selectedUsername && userUsage
       ? userUsage.users.find((user) => user.username === selectedUsername) ?? null
       : null)
   const canShowSpendInsights = Boolean(userUsage) && !isIndividualReport && reportUsers.length > 1
-  const visibleActiveView = activeView === 'spendInsights' && !canShowSpendInsights ? 'overview' : activeView
+  const visibleActiveView = (activeView === 'spendInsights' && !canShowSpendInsights)
+    || (isNativeAiCreditsReport && (activeView === 'guide' || activeView === 'faq'))
+    ? 'overview'
+    : activeView
   const userNavActive = isIndividualReport
     ? visibleActiveView === 'userDetails'
     : visibleActiveView === 'users' || visibleActiveView === 'userDetails'
@@ -544,6 +573,7 @@ function App() {
     ? calculateIndividualPlanUpgradeRecommendation({
         totalMonthlyQuota: individualUser.totalMonthlyQuota,
         currentMonthlyAicAdditionalUsageBillsUsd: monthlyAicAdditionalUsageBills,
+        includedCreditsPolicy,
       })
     : null
 
@@ -697,25 +727,29 @@ function App() {
                   <span className="whitespace-nowrap overflow-hidden text-ellipsis max-sm:sr-only">Cost Management</span>
                 </button>
 
-                <hr className="border-0 border-t border-border-default my-[6px]" />
+                {!isNativeAiCreditsReport && (
+                  <>
+                    <hr className="border-0 border-t border-border-default my-[6px]" />
 
-                <button
-                  type="button"
-                  className={`${sidebarItemBase} ${visibleActiveView === 'guide' ? sidebarActive : sidebarInactive}`}
-                  onClick={() => setActiveView('guide')}
-                >
-                  <InfoIcon size={18} className="shrink-0" aria-hidden />
-                  <span className="whitespace-nowrap overflow-hidden text-ellipsis max-sm:sr-only">Report Format</span>
-                </button>
+                    <button
+                      type="button"
+                      className={`${sidebarItemBase} ${visibleActiveView === 'guide' ? sidebarActive : sidebarInactive}`}
+                      onClick={() => setActiveView('guide')}
+                    >
+                      <InfoIcon size={18} className="shrink-0" aria-hidden />
+                      <span className="whitespace-nowrap overflow-hidden text-ellipsis max-sm:sr-only">Report Format</span>
+                    </button>
 
-                <button
-                  type="button"
-                  className={`${sidebarItemBase} ${visibleActiveView === 'faq' ? sidebarActive : sidebarInactive}`}
-                  onClick={() => setActiveView('faq')}
-                >
-                  <QuestionIcon size={18} className="shrink-0" aria-hidden />
-                  <span className="whitespace-nowrap overflow-hidden text-ellipsis max-sm:sr-only">FAQ</span>
-                </button>
+                    <button
+                      type="button"
+                      className={`${sidebarItemBase} ${visibleActiveView === 'faq' ? sidebarActive : sidebarInactive}`}
+                      onClick={() => setActiveView('faq')}
+                    >
+                      <QuestionIcon size={18} className="shrink-0" aria-hidden />
+                      <span className="whitespace-nowrap overflow-hidden text-ellipsis max-sm:sr-only">FAQ</span>
+                    </button>
+                  </>
+                )}
               </nav>
             </aside>
 
@@ -733,6 +767,8 @@ function App() {
                 reportPlanScope={reportPlanScope}
                 upgradeRecommendation={individualUpgradeRecommendation}
                 onAdjustSeatCounts={reportPlanScope === 'organization' && !isIndividualReport ? () => setActiveView('users') : undefined}
+                reportMode={reportMode}
+                showOrganizationPromotionalDataDisclaimer={showOrganizationPromotionalDataDisclaimer}
               />
             ) : visibleActiveView === 'models' ? (
               modelUsage && modelUsage.models.length > 0 ? (
@@ -742,6 +778,8 @@ function App() {
                     isIndividualReport={isIndividualReport}
                     rangeStart={rangeStart}
                     rangeEnd={rangeEnd}
+                    reportMode={reportMode}
+                    showOrganizationPromotionalDataDisclaimer={showOrganizationPromotionalDataDisclaimer}
                   />
                 </div>
               ) : null
@@ -757,6 +795,8 @@ function App() {
                       setSelectedUsername(username)
                       setActiveView('userDetails')
                    }}
+                   reportMode={reportMode}
+                   includedCreditsPolicy={includedCreditsPolicy}
                  />
                </div>
                 ) : visibleActiveView === 'userDetails' || (visibleActiveView === 'users' && isIndividualReport) ? (
@@ -767,16 +807,24 @@ function App() {
                        showUsersBreadcrumb={!isIndividualReport}
                        rangeStart={rangeStart}
                        rangeEnd={rangeEnd}
+                       reportMode={reportMode}
+                       includedCreditsPolicy={includedCreditsPolicy}
+                       showOrganizationPromotionalDataDisclaimer={showOrganizationPromotionalDataDisclaimer}
                      onBackToUsers={isIndividualReport ? undefined : () => setActiveView('users')}
                    />
                  </div>
                ) : visibleActiveView === 'costCenters' ? (
               <div className={viewContentClasses}>
-                <CostCentersView data={costCenters ?? { costCenters: [] }} rangeStart={rangeStart} />
+                <CostCentersView
+                  data={costCenters ?? { costCenters: [] }}
+                  rangeStart={rangeStart}
+                  reportMode={reportMode}
+                  showOrganizationPromotionalDataDisclaimer={showOrganizationPromotionalDataDisclaimer}
+                />
               </div>
                ) : visibleActiveView === 'products' ? (
                 <div className={viewContentClasses}>
-                  <ProductsView data={productUsage ?? { products: [] }} />
+                  <ProductsView data={productUsage ?? { products: [] }} reportMode={reportMode} />
                 </div>
                ) : visibleActiveView === 'spendInsights' ? (
                 <div className={viewContentClasses}>
@@ -811,19 +859,26 @@ function App() {
                     isApplyingBudgetSimulation={isApplyingBudgetSimulation}
                     onBudgetValueChange={handleBudgetValueChange}
                     onApplyBudgetSimulation={handleApplyBudgetSimulation}
+                    reportMode={reportMode}
+                    showOrganizationPromotionalDataDisclaimer={showOrganizationPromotionalDataDisclaimer}
                   />
                 </div>
-             ) : visibleActiveView === 'guide' ? (
+             ) : !isNativeAiCreditsReport && visibleActiveView === 'guide' ? (
                <div className={viewContentClasses}>
                  <ReportGuideView />
               </div>
-            ) : visibleActiveView === 'faq' ? (
+            ) : !isNativeAiCreditsReport && visibleActiveView === 'faq' ? (
               <div className={viewContentClasses}>
                 <FaqView />
               </div>
             ) : (
               <div className={viewContentClasses}>
-                <OrganizationsView data={orgs ?? { organizations: [] }} rangeStart={rangeStart} />
+                <OrganizationsView
+                  data={orgs ?? { organizations: [] }}
+                  rangeStart={rangeStart}
+                  reportMode={reportMode}
+                  showOrganizationPromotionalDataDisclaimer={showOrganizationPromotionalDataDisclaimer}
+                />
               </div>
             )}
           </main>

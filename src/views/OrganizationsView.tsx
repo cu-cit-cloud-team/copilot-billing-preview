@@ -1,11 +1,12 @@
 import { useCallback, useMemo, useState } from 'react'
 import type { ChangeEvent } from 'react'
-import { BillingProjectionDisclaimer, ExistingDiscountDisclaimer } from '../components/ui'
+import { BillingProjectionDisclaimer, BillingTotalsCards } from '../components/ui'
 import { th, thNum, td, tdNum } from '../components/ui/tableStyles'
 import { appLinks } from '../config/links'
 import type { OrganizationResult, OrgTotals, OrgUserTotals } from '../pipeline/aggregators/organizationAggregator'
 import { calculateAicDiscountAmount, calculateSavingsDifference } from '../utils/billingComparison'
 import { formatAic, formatDifference, formatUsd } from '../utils/format'
+import { isNativeAiCreditsMode, type ReportMode } from '../utils/reportMode'
 
 const MAX_DETAIL_ROWS = 20
 
@@ -30,9 +31,20 @@ function getTopRows(entries: [string, OrgTotals | OrgUserTotals][]): OrgRow[] {
     })
 }
 
-export function OrganizationsView({ data, rangeStart }: { data: OrganizationResult; rangeStart?: string | null }) {
+export function OrganizationsView({
+  data,
+  rangeStart,
+  reportMode = 'transition-period-billing-preview',
+  showOrganizationPromotionalDataDisclaimer = true,
+}: {
+  data: OrganizationResult
+  rangeStart?: string | null
+  reportMode?: ReportMode
+  showOrganizationPromotionalDataDisclaimer?: boolean
+}) {
   const [selected, setSelected] = useState<string>(data.organizations[0]?.organization ?? '')
   const [activeTable, setActiveTable] = useState<'users' | 'models'>('users')
+  const isNativeAiCredits = isNativeAiCreditsMode(reportMode)
 
   const handleSelectChange = useCallback((event: ChangeEvent<HTMLSelectElement>) => {
     setSelected(event.target.value)
@@ -105,7 +117,7 @@ export function OrganizationsView({ data, rangeStart }: { data: OrganizationResu
 
       {selectedOrg && totals && (
         <>
-          {hasCosts && periodLabel && (
+          {!isNativeAiCredits && hasCosts && periodLabel && (
             <p className="text-base font-normal text-center mb-1 text-fg-default">
               {savings > 0 ? (
                 <>
@@ -125,59 +137,31 @@ export function OrganizationsView({ data, rangeStart }: { data: OrganizationResu
             </p>
           )}
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-3">
-            <div className="bg-bg-default border border-border-default rounded-md text-center py-7 px-5">
-              <div className="text-[13px] font-medium text-fg-muted uppercase tracking-[0.5px] mb-3">Current billing (PRUs)</div>
-              <div className="text-4xl font-bold leading-[1.2] text-fg-default">{formatUsd(totals.netAmount)}</div>
-              <div className="text-sm text-fg-default mt-1.5">{totals.requests.toLocaleString()} PRUs</div>
-              <div className="text-xs text-fg-muted mt-1">1 PRU = $0.04</div>
-              <div className="mt-4 pt-3 border-t border-border-default w-full flex flex-col gap-1.5 text-left">
-                <div className="flex justify-between items-center text-[13px] text-fg-default tabular-nums">
-                  <span>Consumed PRUs</span>
-                  <span>{formatUsd(totals.grossAmount)}</span>
-                </div>
-                <div className="flex justify-between items-center text-[13px] text-fg-muted tabular-nums">
-                  <span>Included PRUs</span>
-                  <span>−{formatUsd(totals.discountAmount)}</span>
-                </div>
-                <div className="flex justify-between items-center text-[13px] text-fg-default tabular-nums pt-1.5 border-t border-border-default font-semibold">
-                  <span>Overages</span>
-                  <span>{formatUsd(totals.netAmount)}</span>
-                </div>
-                <ExistingDiscountDisclaimer />
-              </div>
-            </div>
-            <div className="bg-bg-default border border-border-default rounded-md text-center py-7 px-5">
-              <div className="text-[13px] font-medium text-fg-muted uppercase tracking-[0.5px] mb-3">Usage-based billing (AICs)</div>
-              <div className="text-4xl font-bold leading-[1.2] text-app-savings-fg">{formatUsd(totals.aicNetAmount)}</div>
-              <div className="text-sm text-fg-default mt-1.5">{formatAic(totals.aicQuantity)} AICs</div>
-              <div className="text-xs text-fg-muted mt-1">1 AIC = $0.01</div>
-              <div className="mt-4 pt-3 border-t border-border-default w-full flex flex-col gap-1.5 text-left">
-                <div className="flex justify-between items-center text-[13px] text-fg-default tabular-nums">
-                  <span>Consumed AICs</span>
-                  <span>{formatUsd(totals.aicGrossAmount)}</span>
-                </div>
-                <div className="flex justify-between items-center text-[13px] text-fg-muted tabular-nums">
-                  <span>Included AICs</span>
-                  <span>−{formatUsd(Math.abs(aicDiscountAmount))}</span>
-                </div>
-                <div className="flex justify-between items-center text-[13px] text-fg-default tabular-nums pt-1.5 border-t border-border-default font-semibold">
-                  <span>Additional usage</span>
-                  <span>{formatUsd(totals.aicNetAmount)}</span>
-                </div>
-                <ExistingDiscountDisclaimer />
-              </div>
-            </div>
-          </div>
-          <BillingProjectionDisclaimer className="mb-6" />
+          <BillingTotalsCards
+            pruNetAmount={totals.netAmount}
+            pruGrossAmount={totals.grossAmount}
+            pruDiscountAmount={totals.discountAmount}
+            pruQuantity={totals.requests}
+            aicNetAmount={totals.aicNetAmount}
+            aicGrossAmount={totals.aicGrossAmount}
+            aicDiscountAmount={Math.abs(aicDiscountAmount)}
+            aicQuantity={totals.aicQuantity}
+            showExistingDiscountDisclaimer
+            showOrganizationPromotionalDataDisclaimer={showOrganizationPromotionalDataDisclaimer}
+            reportMode={reportMode}
+            className="mb-3"
+          />
+          {!isNativeAiCredits && <BillingProjectionDisclaimer className="mb-6" />}
         </>
       )}
 
       <div className="bg-bg-default border border-border-default rounded-md py-5 px-6 mt-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-5">
         <div className="flex-1 flex flex-col gap-1">
-          <strong className="text-sm font-semibold text-fg-default">Pooled included credits are coming</strong>
+          <strong className="text-sm font-semibold text-fg-default">{isNativeAiCredits ? 'Included AI Credits pool' : 'Pooled included credits are coming'}</strong>
           <p className="m-0 text-[13px] text-fg-muted leading-normal">
-            Under usage-based billing, included credits will be pooled across all licensed users in your account (not per organization). Included credits are shared across your account-wide pool, not allocated separately to each organization. No more unused capacity going to waste from idle users.
+            {isNativeAiCredits
+              ? 'Included credits are shared across your account-wide pool, not allocated separately to each organization.'
+              : 'Under usage-based billing, included credits will be pooled across all licensed users in your account (not per organization). Included credits are shared across your account-wide pool, not allocated separately to each organization. No more unused capacity going to waste from idle users.'}
           </p>
         </div>
         <a
@@ -222,11 +206,11 @@ export function OrganizationsView({ data, rangeStart }: { data: OrganizationResu
               <thead>
                 <tr>
                   <th className={th}>{activeTable === 'users' ? 'User' : 'Model'}</th>
-                  <th className={thNum}>PRUs</th>
-                  <th className={thNum}>PRU Cost</th>
+                  {!isNativeAiCredits && <th className={thNum}>PRUs</th>}
+                  {!isNativeAiCredits && <th className={thNum}>PRU Cost</th>}
                   <th className={thNum}>AICs</th>
                   <th className={thNum}>AIC Cost</th>
-                  <th className={thNum}>Difference</th>
+                  {!isNativeAiCredits && <th className={thNum}>Difference</th>}
                 </tr>
               </thead>
               <tbody>
@@ -235,13 +219,15 @@ export function OrganizationsView({ data, rangeStart }: { data: OrganizationResu
                   return (
                     <tr key={row.label}>
                       <td className={`${td} font-semibold text-fg-default`}>{row.label}</td>
-                      <td className={tdNum}>{row.totals.requests.toLocaleString()}</td>
-                      <td className={tdNum}>{formatUsd(row.totals.netAmount)}</td>
+                      {!isNativeAiCredits && <td className={tdNum}>{row.totals.requests.toLocaleString()}</td>}
+                      {!isNativeAiCredits && <td className={tdNum}>{formatUsd(row.totals.netAmount)}</td>}
                       <td className={tdNum}>{formatAic(row.totals.aicQuantity)}</td>
                       <td className={tdNum}>{formatUsd(row.totals.aicNetAmount)}</td>
-                      <td className={`${tdNum}${diff > 0 ? ' text-app-savings-fg font-semibold' : diff < 0 ? ' text-fg-danger font-semibold' : ''}`}>
-                        {formatDifference(diff)}
-                      </td>
+                      {!isNativeAiCredits && (
+                        <td className={`${tdNum}${diff > 0 ? ' text-app-savings-fg font-semibold' : diff < 0 ? ' text-fg-danger font-semibold' : ''}`}>
+                          {formatDifference(diff)}
+                        </td>
+                      )}
                     </tr>
                   )
                 })}

@@ -1,9 +1,16 @@
 import type { Aggregator } from './base'
-import { getUsageMetrics, type TokenUsageHeader, type TokenUsageRecord } from '../parser'
+import type { TokenUsageHeader, TokenUsageRecord } from '../parser'
 import { getDisplayModelName } from '../modelLabels'
 import { getFriendlyProductName } from '../productClassification'
 import { classifyUserSpendSegments, type UserSpendSegmentId } from '../../utils/userSpendSegments'
 import { selectKnownMonthlyQuota } from '../aicIncludedCredits'
+import {
+  NATIVE_AI_CREDITS_STANDARD_INCLUDED_CREDITS_POLICY,
+  TRANSITION_PERIOD_INCLUDED_CREDITS_POLICY,
+  type IncludedCreditsPolicy,
+} from '../includedCreditsPolicy'
+import type { ReportFormat, ReportFormatMetadata } from '../reportAdapters'
+import { getAggregatorReportFormat, getAggregatorUsageMetrics } from './usageMetrics'
 
 export type UserModelDailyUsage = {
   requests: number
@@ -149,6 +156,18 @@ function ensureProductModel(product: { models: Map<string, UserProductUsage> }, 
 
 export class UserUsageAggregator implements Aggregator<TokenUsageRecord, UserUsageResult, TokenUsageHeader> {
   private byUser = new Map<string, UserUsageInternal>()
+  private readonly reportFormat: ReportFormat
+  private readonly quotaPolicy: IncludedCreditsPolicy
+
+  constructor(
+    reportMetadataOrFormat?: ReportFormat | ReportFormatMetadata,
+    includedCreditsPolicy?: IncludedCreditsPolicy,
+  ) {
+    this.reportFormat = getAggregatorReportFormat(reportMetadataOrFormat)
+    this.quotaPolicy = includedCreditsPolicy ?? (this.reportFormat === 'native-ai-credits'
+      ? NATIVE_AI_CREDITS_STANDARD_INCLUDED_CREDITS_POLICY
+      : TRANSITION_PERIOD_INCLUDED_CREDITS_POLICY)
+  }
 
   onHeader(): void {
     // header is intentionally ignored (we rely on parsed TokenUsageRecord fields)
@@ -168,7 +187,7 @@ export class UserUsageAggregator implements Aggregator<TokenUsageRecord, UserUsa
     if (!user) {
       user = {
         username,
-        totalMonthlyQuota: selectKnownMonthlyQuota(0, record.total_monthly_quota),
+        totalMonthlyQuota: selectKnownMonthlyQuota(0, record.total_monthly_quota, this.quotaPolicy),
         organizations: new Set(),
         costCenters: new Set(),
         daily: new Map(),
@@ -187,7 +206,7 @@ export class UserUsageAggregator implements Aggregator<TokenUsageRecord, UserUsa
       this.byUser.set(username, user)
     }
 
-    user.totalMonthlyQuota = selectKnownMonthlyQuota(user.totalMonthlyQuota, record.total_monthly_quota)
+    user.totalMonthlyQuota = selectKnownMonthlyQuota(user.totalMonthlyQuota, record.total_monthly_quota, this.quotaPolicy)
 
     const organization = record.organization.trim()
     if (organization) {
@@ -199,7 +218,7 @@ export class UserUsageAggregator implements Aggregator<TokenUsageRecord, UserUsa
       user.costCenters.add(costCenter)
     }
 
-    const { requests, grossAmount, discountAmount, netAmount, aicQuantity, aicGrossAmount, aicNetAmount } = getUsageMetrics(record)
+    const { requests, grossAmount, discountAmount, netAmount, aicQuantity, aicGrossAmount, aicNetAmount } = getAggregatorUsageMetrics(record, this.reportFormat)
 
     user.distinctModels.add(model)
     user.totals.requests += requests
